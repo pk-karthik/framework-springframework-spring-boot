@@ -43,6 +43,7 @@ import org.springframework.boot.bind.RelaxedDataBinder;
 import org.springframework.boot.context.embedded.ConfigurableEmbeddedServletContainer;
 import org.springframework.boot.context.embedded.jetty.JettyEmbeddedServletContainerFactory;
 import org.springframework.boot.context.embedded.tomcat.TomcatContextCustomizer;
+import org.springframework.boot.context.embedded.tomcat.TomcatEmbeddedServletContainer;
 import org.springframework.boot.context.embedded.tomcat.TomcatEmbeddedServletContainerFactory;
 import org.springframework.boot.context.embedded.undertow.UndertowEmbeddedServletContainerFactory;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
@@ -140,6 +141,7 @@ public class ServerPropertiesTests {
 		map.put("server.tomcat.protocol_header", "X-Forwarded-Protocol");
 		map.put("server.tomcat.remote_ip_header", "Remote-Ip");
 		map.put("server.tomcat.internal_proxies", "10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
+		map.put("server.tomcat.background_processor_delay", "10");
 		bindProperties(map);
 		ServerProperties.Tomcat tomcat = this.properties.getTomcat();
 		assertThat(tomcat.getAccesslog().getPattern()).isEqualTo("%h %t '%r' %s %b");
@@ -150,6 +152,7 @@ public class ServerPropertiesTests {
 		assertThat(tomcat.getProtocolHeader()).isEqualTo("X-Forwarded-Protocol");
 		assertThat(tomcat.getInternalProxies())
 				.isEqualTo("10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
+		assertThat(tomcat.getBackgroundProcessorDelay()).isEqualTo(10);
 	}
 
 	@Test
@@ -339,7 +342,7 @@ public class ServerPropertiesTests {
 		bindProperties(map);
 		TomcatEmbeddedServletContainerFactory container = new TomcatEmbeddedServletContainerFactory();
 		this.properties.customize(container);
-		assertThat(container.getValves()).isEmpty();
+		assertThat(container.getEngineValves()).isEmpty();
 	}
 
 	@Test
@@ -350,6 +353,29 @@ public class ServerPropertiesTests {
 		map.put("server.tomcat.remote_ip_header", "X-Forwarded-For");
 		bindProperties(map);
 		testRemoteIpValveConfigured();
+	}
+
+	@Test
+	public void defaultTomcatBackgroundProcessorDelay() throws Exception {
+		TomcatEmbeddedServletContainerFactory container = new TomcatEmbeddedServletContainerFactory();
+		this.properties.customize(container);
+		assertThat(
+				((TomcatEmbeddedServletContainer) container.getEmbeddedServletContainer())
+						.getTomcat().getEngine().getBackgroundProcessorDelay())
+								.isEqualTo(30);
+	}
+
+	@Test
+	public void customTomcatBackgroundProcessorDelay() throws Exception {
+		Map<String, String> map = new HashMap<String, String>();
+		map.put("server.tomcat.background-processor-delay", "5");
+		bindProperties(map);
+		TomcatEmbeddedServletContainerFactory container = new TomcatEmbeddedServletContainerFactory();
+		this.properties.customize(container);
+		assertThat(
+				((TomcatEmbeddedServletContainer) container.getEmbeddedServletContainer())
+						.getTomcat().getEngine().getBackgroundProcessorDelay())
+								.isEqualTo(5);
 	}
 
 	@Test
@@ -368,8 +394,8 @@ public class ServerPropertiesTests {
 	private void testRemoteIpValveConfigured() {
 		TomcatEmbeddedServletContainerFactory container = new TomcatEmbeddedServletContainerFactory();
 		this.properties.customize(container);
-		assertThat(container.getValves()).hasSize(1);
-		Valve valve = container.getValves().iterator().next();
+		assertThat(container.getEngineValves()).hasSize(1);
+		Valve valve = container.getEngineValves().iterator().next();
 		assertThat(valve).isInstanceOf(RemoteIpValve.class);
 		RemoteIpValve remoteIpValve = (RemoteIpValve) valve;
 		assertThat(remoteIpValve.getProtocolHeader()).isEqualTo("X-Forwarded-Proto");
@@ -398,8 +424,8 @@ public class ServerPropertiesTests {
 		TomcatEmbeddedServletContainerFactory container = new TomcatEmbeddedServletContainerFactory();
 		this.properties.customize(container);
 
-		assertThat(container.getValves()).hasSize(1);
-		Valve valve = container.getValves().iterator().next();
+		assertThat(container.getEngineValves()).hasSize(1);
+		Valve valve = container.getEngineValves().iterator().next();
 		assertThat(valve).isInstanceOf(RemoteIpValve.class);
 		RemoteIpValve remoteIpValve = (RemoteIpValve) valve;
 		assertThat(remoteIpValve.getProtocolHeader()).isEqualTo("x-my-protocol-header");

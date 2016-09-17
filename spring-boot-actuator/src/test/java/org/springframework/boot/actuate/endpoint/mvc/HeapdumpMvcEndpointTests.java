@@ -93,6 +93,7 @@ public class HeapdumpMvcEndpointTests {
 	public void invokeWhenLockedShouldReturnTooManyRequestsStatus() throws Exception {
 		this.endpoint.setLocked(true);
 		this.mvc.perform(get("/heapdump")).andExpect(status().isTooManyRequests());
+		assertThat(Thread.interrupted()).isTrue();
 	}
 
 	@Test
@@ -150,6 +151,9 @@ public class HeapdumpMvcEndpointTests {
 					}
 					if (TestHeapdumpMvcEndpoint.this.locked) {
 						throw new InterruptedException();
+					}
+					if (file.exists()) {
+						throw new IOException("File exists");
 					}
 					FileCopyUtils.copy(TestHeapdumpMvcEndpoint.this.heapDump.getBytes(),
 							file);

@@ -56,7 +56,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  */
 @ConfigurationProperties("endpoints.heapdump")
 @HypermediaDisabled
-public class HeapdumpMvcEndpoint extends AbstractMvcEndpoint implements MvcEndpoint {
+public class HeapdumpMvcEndpoint extends AbstractMvcEndpoint {
 
 	private final long timeout;
 
@@ -93,7 +93,7 @@ public class HeapdumpMvcEndpoint extends AbstractMvcEndpoint implements MvcEndpo
 			}
 		}
 		catch (InterruptedException ex) {
-			// Ignore
+			Thread.currentThread().interrupt();
 		}
 		response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
 	}

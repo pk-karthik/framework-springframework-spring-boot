@@ -30,13 +30,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @author Stephane Nicoll
  * @since 1.1.0
+ * @deprecated as of 1.4 in favor of the Artemis support
  */
 @ConfigurationProperties(prefix = "spring.hornetq")
+@Deprecated
 public class HornetQProperties {
 
 	/**
-	 * HornetQ deployment mode, auto-detected by default. Can be explicitly set to
-	 * "native" or "embedded".
+	 * HornetQ deployment mode, auto-detected by default.
 	 */
 	private HornetQMode mode;
 

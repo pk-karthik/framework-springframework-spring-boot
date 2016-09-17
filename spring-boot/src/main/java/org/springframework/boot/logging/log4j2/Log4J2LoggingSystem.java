@@ -129,15 +129,24 @@ public class Log4J2LoggingSystem extends Slf4JLoggingSystem {
 
 	@Override
 	public void beforeInitialize() {
+		LoggerContext loggerContext = getLoggerContext();
+		if (isAlreadyInitialized(loggerContext)) {
+			return;
+		}
 		super.beforeInitialize();
-		getRootLoggerConfig().addFilter(FILTER);
+		loggerContext.getConfiguration().addFilter(FILTER);
 	}
 
 	@Override
 	public void initialize(LoggingInitializationContext initializationContext,
 			String configLocation, LogFile logFile) {
-		getRootLoggerConfig().removeFilter(FILTER);
+		LoggerContext loggerContext = getLoggerContext();
+		if (isAlreadyInitialized(loggerContext)) {
+			return;
+		}
+		loggerContext.getConfiguration().removeFilter(FILTER);
 		super.initialize(initializationContext, configLocation, logFile);
+		markAsInitialized(loggerContext);
 	}
 
 	@Override
@@ -204,8 +213,11 @@ public class Log4J2LoggingSystem extends Slf4JLoggingSystem {
 		return new ShutdownHandler();
 	}
 
-	private LoggerConfig getRootLoggerConfig() {
-		return getLoggerContext().getConfiguration().getLoggerConfig("");
+	@Override
+	public void cleanUp() {
+		super.cleanUp();
+		LoggerContext loggerContext = getLoggerContext();
+		markAsUninitialized(loggerContext);
 	}
 
 	private LoggerConfig getLoggerConfig(String name) {
@@ -217,6 +229,18 @@ public class Log4J2LoggingSystem extends Slf4JLoggingSystem {
 		return (LoggerContext) LogManager.getContext(false);
 	}
 
+	private boolean isAlreadyInitialized(LoggerContext loggerContext) {
+		return LoggingSystem.class.getName().equals(loggerContext.getExternalContext());
+	}
+
+	private void markAsInitialized(LoggerContext loggerContext) {
+		loggerContext.setExternalContext(LoggingSystem.class.getName());
+	}
+
+	private void markAsUninitialized(LoggerContext loggerContext) {
+		loggerContext.setExternalContext(null);
+	}
+
 	private final class ShutdownHandler implements Runnable {
 
 		@Override
@@ -225,4 +249,5 @@ public class Log4J2LoggingSystem extends Slf4JLoggingSystem {
 		}
 
 	}
+
 }

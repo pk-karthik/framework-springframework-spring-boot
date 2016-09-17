@@ -777,7 +777,7 @@ public class ServerProperties
 			if (getBasedir() != null) {
 				factory.setBaseDirectory(getBasedir());
 			}
-			customizeBackgroundProcessorDelay(factory);
+			factory.setBackgroundProcessorDelay(Tomcat.this.backgroundProcessorDelay);
 			customizeRemoteIpValve(serverProperties, factory);
 			if (this.maxThreads > 0) {
 				customizeMaxThreads(factory);
@@ -819,19 +819,6 @@ public class ServerProperties
 			}
 		}
 
-		private void customizeBackgroundProcessorDelay(
-				TomcatEmbeddedServletContainerFactory factory) {
-			factory.addContextCustomizers(new TomcatContextCustomizer() {
-
-				@Override
-				public void customize(Context context) {
-					context.setBackgroundProcessorDelay(
-							Tomcat.this.backgroundProcessorDelay);
-				}
-
-			});
-		}
-
 		private void customizeRemoteIpValve(ServerProperties properties,
 				TomcatEmbeddedServletContainerFactory factory) {
 			String protocolHeader = getProtocolHeader();
@@ -851,7 +838,7 @@ public class ServerProperties
 				valve.setPortHeader(getPortHeader());
 				valve.setProtocolHeaderHttpsValue(getProtocolHeaderHttpsValue());
 				// ... so it's safe to add this valve by default.
-				factory.addContextValves(valve);
+				factory.addEngineValves(valve);
 			}
 		}
 
@@ -925,7 +912,7 @@ public class ServerProperties
 			valve.setPrefix(this.accesslog.getPrefix());
 			valve.setSuffix(this.accesslog.getSuffix());
 			valve.setRenameOnRotate(this.accesslog.isRenameOnRotate());
-			factory.addContextValves(valve);
+			factory.addEngineValves(valve);
 		}
 
 		private void customizeRedirectContextRoot(
@@ -1270,6 +1257,12 @@ public class ServerProperties
 			if (this.accesslog.pattern != null) {
 				factory.setAccessLogPattern(this.accesslog.pattern);
 			}
+			if (this.accesslog.prefix != null) {
+				factory.setAccessLogPrefix(this.accesslog.prefix);
+			}
+			if (this.accesslog.suffix != null) {
+				factory.setAccessLogSuffix(this.accesslog.suffix);
+			}
 			if (this.accesslog.enabled != null) {
 				factory.setAccessLogEnabled(this.accesslog.enabled);
 			}
@@ -1341,6 +1334,16 @@ public class ServerProperties
 			private String pattern = "common";
 
 			/**
+			 * Log file name prefix.
+			 */
+			protected String prefix = "access_log.";
+
+			/**
+			 * Log file name suffix.
+			 */
+			private String suffix = "log";
+
+			/**
 			 * Undertow access log directory.
 			 */
 			private File dir = new File("logs");
@@ -1359,6 +1362,22 @@ public class ServerProperties
 
 			public void setPattern(String pattern) {
 				this.pattern = pattern;
+			}
+
+			public String getPrefix() {
+				return this.prefix;
+			}
+
+			public void setPrefix(String prefix) {
+				this.prefix = prefix;
+			}
+
+			public String getSuffix() {
+				return this.suffix;
+			}
+
+			public void setSuffix(String suffix) {
+				this.suffix = suffix;
 			}
 
 			public File getDir() {

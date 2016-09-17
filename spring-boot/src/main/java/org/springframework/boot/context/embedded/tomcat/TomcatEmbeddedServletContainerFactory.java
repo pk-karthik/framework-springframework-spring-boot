@@ -26,6 +26,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +36,7 @@ import javax.servlet.ServletContainerInitializer;
 import javax.servlet.ServletContext;
 
 import org.apache.catalina.Context;
+import org.apache.catalina.Engine;
 import org.apache.catalina.Host;
 import org.apache.catalina.Lifecycle;
 import org.apache.catalina.LifecycleEvent;
@@ -43,7 +46,6 @@ import org.apache.catalina.Valve;
 import org.apache.catalina.Wrapper;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.loader.WebappLoader;
-import org.apache.catalina.session.ManagerBase;
 import org.apache.catalina.session.StandardManager;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.catalina.startup.Tomcat.FixContextListener;
@@ -88,6 +90,7 @@ import org.springframework.util.StringUtils;
  * @author Stephane Nicoll
  * @author Andy Wilkinson
  * @author Eddú Meléndez
+ * @author Christoffer Sawicki
  * @see #setPort(int)
  * @see #setContextLifecycleListeners(Collection)
  * @see TomcatEmbeddedServletContainer
@@ -106,6 +109,8 @@ public class TomcatEmbeddedServletContainerFactory
 
 	private File baseDirectory;
 
+	private List<Valve> engineValves = new ArrayList<Valve>();
+
 	private List<Valve> contextValves = new ArrayList<Valve>();
 
 	private List<LifecycleListener> contextLifecycleListeners = new ArrayList<LifecycleListener>();
@@ -123,6 +128,8 @@ public class TomcatEmbeddedServletContainerFactory
 	private String tldSkip;
 
 	private Charset uriEncoding = DEFAULT_CHARSET;
+
+	private int backgroundProcessorDelay;
 
 	/**
 	 * Create a new {@link TomcatEmbeddedServletContainerFactory} instance.
@@ -162,12 +169,19 @@ public class TomcatEmbeddedServletContainerFactory
 		customizeConnector(connector);
 		tomcat.setConnector(connector);
 		tomcat.getHost().setAutoDeploy(false);
-		tomcat.getEngine().setBackgroundProcessorDelay(-1);
+		configureEngine(tomcat.getEngine());
 		for (Connector additionalConnector : this.additionalTomcatConnectors) {
 			tomcat.getService().addConnector(additionalConnector);
 		}
 		prepareContext(tomcat.getHost(), initializers);
 		return getTomcatEmbeddedServletContainer(tomcat);
+	}
+
+	private void configureEngine(Engine engine) {
+		engine.setBackgroundProcessorDelay(this.backgroundProcessorDelay);
+		for (Valve valve : this.engineValves) {
+			engine.getPipeline().addValve(valve);
+		}
 	}
 
 	protected void prepareContext(Host host, ServletContextInitializer[] initializers) {
@@ -182,6 +196,8 @@ public class TomcatEmbeddedServletContainerFactory
 		context.setParentClassLoader(
 				this.resourceLoader != null ? this.resourceLoader.getClassLoader()
 						: ClassUtils.getDefaultClassLoader());
+		resetDefaultLocaleMapping(context);
+		addLocaleMappings(context);
 		try {
 			context.setUseRelativeRedirects(false);
 		}
@@ -205,6 +221,27 @@ public class TomcatEmbeddedServletContainerFactory
 		configureContext(context, initializersToUse);
 		host.addChild(context);
 		postProcessContext(context);
+	}
+
+	/**
+	 * Override Tomcat's default locale mappings to align with other containers. See
+	 * {@code org.apache.catalina.util.CharsetMapperDefault.properties}.
+	 * @param context the context to reset
+	 */
+	private void resetDefaultLocaleMapping(TomcatEmbeddedContext context) {
+		context.addLocaleEncodingMappingParameter(Locale.ENGLISH.toString(),
+				DEFAULT_CHARSET.displayName());
+		context.addLocaleEncodingMappingParameter(Locale.FRENCH.toString(),
+				DEFAULT_CHARSET.displayName());
+	}
+
+	private void addLocaleMappings(TomcatEmbeddedContext context) {
+		for (Map.Entry<Locale, Charset> entry : getLocaleCharsetMappings().entrySet()) {
+			Locale locale = entry.getKey();
+			Charset charset = entry.getValue();
+			context.addLocaleEncodingMappingParameter(locale.toString(),
+					charset.toString());
+		}
 	}
 
 	private void addDefaultServlet(Context context) {
@@ -452,7 +489,6 @@ public class TomcatEmbeddedServletContainerFactory
 		else {
 			context.addLifecycleListener(new DisablePersistSessionListener());
 		}
-		context.addLifecycleListener(new LazySessionIdGeneratorListener());
 	}
 
 	private void configurePersistSession(Manager manager) {
@@ -528,8 +564,36 @@ public class TomcatEmbeddedServletContainerFactory
 	}
 
 	/**
+	 * Set {@link Valve}s that should be applied to the Tomcat {@link Engine}. Calling
+	 * this method will replace any existing valves.
+	 * @param engineValves the valves to set
+	 */
+	public void setEngineValves(Collection<? extends Valve> engineValves) {
+		Assert.notNull(engineValves, "Valves must not be null");
+		this.engineValves = new ArrayList<Valve>(engineValves);
+	}
+
+	/**
+	 * Returns a mutable collection of the {@link Valve}s that will be applied to the
+	 * Tomcat {@link Engine}.
+	 * @return the engineValves the valves that will be applied
+	 */
+	public Collection<Valve> getEngineValves() {
+		return this.engineValves;
+	}
+
+	/**
+	 * Add {@link Valve}s that should be applied to the Tomcat {@link Engine}.
+	 * @param engineValves the valves to add
+	 */
+	public void addEngineValves(Valve... engineValves) {
+		Assert.notNull(engineValves, "Valves must not be null");
+		this.engineValves.addAll(Arrays.asList(engineValves));
+	}
+
+	/**
 	 * Set {@link Valve}s that should be applied to the Tomcat {@link Context}. Calling
-	 * this method will replace any existing listeners.
+	 * this method will replace any existing valves.
 	 * @param contextValves the valves to set
 	 */
 	public void setContextValves(Collection<? extends Valve> contextValves) {
@@ -541,8 +605,20 @@ public class TomcatEmbeddedServletContainerFactory
 	 * Returns a mutable collection of the {@link Valve}s that will be applied to the
 	 * Tomcat {@link Context}.
 	 * @return the contextValves the valves that will be applied
+	 * @deprecated as of 1.4 in favor of {@link #getContextValves()}
 	 */
+	@Deprecated
 	public Collection<Valve> getValves() {
+		return getContextValves();
+	}
+
+	/**
+	 * Returns a mutable collection of the {@link Valve}s that will be applied to the
+	 * Tomcat {@link Context}.
+	 * @return the contextValves the valves that will be applied
+	 * @see #getEngineValves()
+	 */
+	public Collection<Valve> getContextValves() {
 		return this.contextValves;
 	}
 
@@ -692,8 +768,18 @@ public class TomcatEmbeddedServletContainerFactory
 	}
 
 	/**
+	 * Sets the background processor delay in seconds.
+	 * @param delay the delay in seconds
+	 * @since 1.4.1
+	 */
+	public void setBackgroundProcessorDelay(int delay) {
+		this.backgroundProcessorDelay = delay;
+	}
+
+	/**
 	 * {@link LifecycleListener} that stores an empty merged web.xml. This is critical for
-	 * Jasper to prevent warnings about missing web.xml files and to enable EL.
+	 * Jasper on Tomcat 7 to prevent warnings about missing web.xml files and to enable
+	 * EL.
 	 */
 	private static class StoreMergedWebXmlListener implements LifecycleListener {
 
@@ -708,10 +794,8 @@ public class TomcatEmbeddedServletContainerFactory
 
 		private void onStart(Context context) {
 			ServletContext servletContext = context.getServletContext();
-			if (servletContext
-					.getAttribute(StoreMergedWebXmlListener.MERGED_WEB_XML) == null) {
-				servletContext.setAttribute(StoreMergedWebXmlListener.MERGED_WEB_XML,
-						getEmptyWebXml());
+			if (servletContext.getAttribute(MERGED_WEB_XML) == null) {
+				servletContext.setAttribute(MERGED_WEB_XML, getEmptyWebXml());
 			}
 			TomcatResources.get(context).addClasspathResources();
 		}
@@ -749,22 +833,6 @@ public class TomcatEmbeddedServletContainerFactory
 				Manager manager = context.getManager();
 				if (manager != null && manager instanceof StandardManager) {
 					((StandardManager) manager).setPathname(null);
-				}
-			}
-		}
-
-	}
-
-	private static class LazySessionIdGeneratorListener implements LifecycleListener {
-
-		@Override
-		public void lifecycleEvent(LifecycleEvent event) {
-			if (event.getType().equals(Lifecycle.START_EVENT)) {
-				Context context = (Context) event.getLifecycle();
-				Manager manager = context.getManager();
-				if (manager instanceof ManagerBase) {
-					((ManagerBase) manager)
-							.setSessionIdGenerator(new LazySessionIdGenerator());
 				}
 			}
 		}

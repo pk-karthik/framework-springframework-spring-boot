@@ -125,7 +125,7 @@ authenticated).
 |true
 
 |`trace`
-|Displays trace information (by default the last few HTTP requests).
+|Displays trace information (by default the last 100 HTTP requests).
 |true
 |===
 
@@ -683,10 +683,10 @@ The information exposed by the health endpoint varies depending on whether or no
 accessed anonymously, and whether or not the enclosing application is secure.
 By default, when accessed anonymously in a secure application, any details about the
 server's health are hidden and the endpoint will simply indicate whether or not the server
-is up or down. Furthermore, when accessed anonymously, the response is cached for a
-configurable period to prevent the endpoint being used in a denial of service attack.
-The `endpoints.health.time-to-live` property is used to configure the caching period in
-milliseconds. It defaults to 1000, i.e. one second.
+is up or down. Furthermore the response is cached for a configurable period to prevent the
+endpoint being used in a denial of service attack. The `endpoints.health.time-to-live`
+property is used to configure the caching period in milliseconds. It defaults to 1000,
+i.e. one second.
 
 The above-described restrictions can be enhanced, thereby allowing only authenticated
 users full access to the health endpoint in a secure application. To do so, set
@@ -885,6 +885,9 @@ for details). By default Spring Boot will search for commands in the following l
 * `+classpath*:/crash/commands/**+`
 
 TIP: You can change the search path by settings a `shell.command-path-patterns` property.
+
+NOTE: If you are using an executable archive, any classes that a shell command depends
+upon must be packaged in a nested jar rather than directly in the executable jar or war.
 
 Here is a simple '`hello`' command that could be loaded from
 `src/main/resources/commands/hello.groovy`
@@ -1405,7 +1408,7 @@ use that directly, or you can simply publish `AuditApplicationEvent` via the Spr
 [[production-ready-tracing]]
 == Tracing
 Tracing is automatically enabled for all HTTP requests. You can view the `trace` endpoint
-and obtain basic information about the last few requests:
+and obtain basic information about the last 100 requests:
 
 [source,json,indent=0]
 ----
