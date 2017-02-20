@@ -34,8 +34,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 
 /**
- * Test {@link MockBean} on a test class field can be used to replace existing bean
- * while preserving qualifiers.
+ * Test {@link MockBean} on a test class field can be used to replace existing bean while
+ * preserving qualifiers.
+ *
+ * @author Stephane Nicoll
+ * @author Phillip Webb
  */
 @RunWith(SpringRunner.class)
 public class MockBeanOnTestFieldForExistingBeanWithQualifierIntegrationTests {
@@ -59,8 +62,8 @@ public class MockBeanOnTestFieldForExistingBeanWithQualifierIntegrationTests {
 	@Test
 	public void onlyQualifiedBeanIsReplaced() {
 		assertThat(this.applicationContext.getBean("service")).isSameAs(this.service);
-		ExampleService anotherService = this.applicationContext.getBean(
-				"anotherService", ExampleService.class);
+		ExampleService anotherService = this.applicationContext.getBean("anotherService",
+				ExampleService.class);
 		assertThat(anotherService.greeting()).isEqualTo("Another");
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.springframework.boot.context.properties;
 
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.PostConstruct;
 import javax.validation.constraints.NotNull;
@@ -46,6 +47,8 @@ import org.springframework.validation.BindException;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ValidationUtils;
 import org.springframework.validation.Validator;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
@@ -140,6 +143,18 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 	}
 
 	@Test
+	public void testSuccessfulValidationWithInterface() {
+		MockEnvironment env = new MockEnvironment();
+		env.setProperty("test.foo", "bar");
+		this.context = new AnnotationConfigApplicationContext();
+		this.context.setEnvironment(env);
+		this.context.register(TestConfigurationWithValidationAndInterface.class);
+		this.context.refresh();
+		assertThat(this.context.getBean(ValidatedPropertiesImpl.class).getFoo())
+				.isEqualTo("bar");
+	}
+
+	@Test
 	public void testInitializersSeeBoundProperties() {
 		MockEnvironment env = new MockEnvironment();
 		env.setProperty("bar", "foo");
@@ -217,29 +232,6 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 		this.context.refresh();
 		assertThat(this.context.getBean(PropertyWithValue.class).getValue())
 				.isEqualTo("foo");
-	}
-
-	@Test
-	public void placeholderResolutionWithCustomLocation() throws Exception {
-		this.context = new AnnotationConfigApplicationContext();
-		TestPropertySourceUtils.addInlinedPropertiesToEnvironment(this.context,
-				"fooValue=bar");
-		this.context.register(CustomConfigurationLocation.class);
-		this.context.refresh();
-		assertThat(this.context.getBean(CustomConfigurationLocation.class).getFoo())
-				.isEqualTo("bar");
-	}
-
-	@Test
-	public void placeholderResolutionWithUnmergedCustomLocation() throws Exception {
-		this.context = new AnnotationConfigApplicationContext();
-		TestPropertySourceUtils.addInlinedPropertiesToEnvironment(this.context,
-				"fooValue:bar");
-		this.context.register(UnmergedCustomConfigurationLocation.class);
-		this.context.refresh();
-		assertThat(
-				this.context.getBean(UnmergedCustomConfigurationLocation.class).getFoo())
-						.isEqualTo("${fooValue}");
 	}
 
 	@Test
@@ -350,6 +342,17 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 		this.context.refresh();
 		assertThat(this.output.toString()).contains(
 				"Multiple PropertySourcesPlaceholderConfigurer beans registered");
+	}
+
+	@Test
+	public void propertiesWithMap() throws Exception {
+		this.context = new AnnotationConfigApplicationContext();
+		TestPropertySourceUtils.addInlinedPropertiesToEnvironment(this.context,
+				"test.map.foo=bar");
+		this.context.register(PropertiesWithMap.class);
+		this.context.refresh();
+		assertThat(this.context.getBean(PropertiesWithMap.class).getMap())
+				.containsEntry("foo", "bar");
 	}
 
 	private void assertBindingFailure(int errorCount) {
@@ -479,6 +482,7 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 	}
 
 	@ConfigurationProperties(prefix = "test")
+	@Validated
 	public static class PropertyWithJSR303 extends PropertyWithoutJSR303 {
 
 		@NotNull
@@ -492,6 +496,39 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 			return this.bar;
 		}
 
+	}
+
+	@Configuration
+	@EnableConfigurationProperties
+	public static class TestConfigurationWithValidationAndInterface {
+
+		@Bean
+		public ValidatedPropertiesImpl testProperties() {
+			return new ValidatedPropertiesImpl();
+		}
+
+	}
+
+	interface ValidatedProperties {
+
+		String getFoo();
+	}
+
+	@ConfigurationProperties("test")
+	@Validated
+	public static class ValidatedPropertiesImpl implements ValidatedProperties {
+
+		@NotNull
+		private String foo;
+
+		@Override
+		public String getFoo() {
+			return this.foo;
+		}
+
+		public void setFoo(String foo) {
+			this.foo = foo;
+		}
 	}
 
 	@Configuration
@@ -522,6 +559,7 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 		public void setFoo(String foo) {
 			this.foo = foo;
 		}
+
 	}
 
 	public static class CustomPropertyValidator implements Validator {
@@ -600,7 +638,9 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 	}
 
 	enum FooEnum {
+
 		FOO, BAZ, BAR
+
 	}
 
 	@Configuration
@@ -626,34 +666,24 @@ public class ConfigurationPropertiesBindingPostProcessorTests {
 
 	}
 
+	@Configuration
 	@EnableConfigurationProperties
-	@ConfigurationProperties(locations = "custom-location.yml")
-	public static class CustomConfigurationLocation {
+	@ConfigurationProperties(prefix = "test")
+	public static class PropertiesWithMap {
 
-		private String foo;
-
-		public String getFoo() {
-			return this.foo;
+		@Bean
+		public Validator validator() {
+			return new LocalValidatorFactoryBean();
 		}
 
-		public void setFoo(String foo) {
-			this.foo = foo;
+		private Map<String, String> map;
+
+		public Map<String, String> getMap() {
+			return this.map;
 		}
 
-	}
-
-	@EnableConfigurationProperties
-	@ConfigurationProperties(locations = "custom-location.yml", merge = false)
-	public static class UnmergedCustomConfigurationLocation {
-
-		private String foo;
-
-		public String getFoo() {
-			return this.foo;
-		}
-
-		public void setFoo(String foo) {
-			this.foo = foo;
+		public void setMap(Map<String, String> map) {
+			this.map = map;
 		}
 
 	}

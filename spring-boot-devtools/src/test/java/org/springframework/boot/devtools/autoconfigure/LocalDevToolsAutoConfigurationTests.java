@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,16 +21,22 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.catalina.Container;
+import org.apache.catalina.core.StandardWrapper;
+import org.apache.jasper.EmbeddedServletOptions;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-import org.thymeleaf.templateresolver.TemplateResolver;
+import org.thymeleaf.spring5.templateresolver.SpringResourceTemplateResolver;
 
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.thymeleaf.ThymeleafAutoConfiguration;
+import org.springframework.boot.autoconfigure.web.EmbeddedServletContainerAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.ResourceProperties;
+import org.springframework.boot.context.embedded.EmbeddedWebApplicationContext;
+import org.springframework.boot.context.embedded.tomcat.TomcatEmbeddedServletContainer;
 import org.springframework.boot.devtools.classpath.ClassPathChangedEvent;
 import org.springframework.boot.devtools.classpath.ClassPathFileSystemWatcher;
 import org.springframework.boot.devtools.filewatch.ChangedFiles;
@@ -50,7 +56,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.SocketUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -85,16 +91,16 @@ public class LocalDevToolsAutoConfigurationTests {
 	@Test
 	public void thymeleafCacheIsFalse() throws Exception {
 		this.context = initializeAndRun(Config.class);
-		TemplateResolver resolver = this.context.getBean(TemplateResolver.class);
-		resolver.initialize();
+		SpringResourceTemplateResolver resolver = this.context
+				.getBean(SpringResourceTemplateResolver.class);
 		assertThat(resolver.isCacheable()).isFalse();
 	}
 
 	@Test
 	public void defaultPropertyCanBeOverriddenFromCommandLine() throws Exception {
 		this.context = initializeAndRun(Config.class, "--spring.thymeleaf.cache=true");
-		TemplateResolver resolver = this.context.getBean(TemplateResolver.class);
-		resolver.initialize();
+		SpringResourceTemplateResolver resolver = this.context
+				.getBean(SpringResourceTemplateResolver.class);
 		assertThat(resolver.isCacheable()).isTrue();
 	}
 
@@ -105,8 +111,8 @@ public class LocalDevToolsAutoConfigurationTests {
 				new File("src/test/resources/user-home").getAbsolutePath());
 		try {
 			this.context = initializeAndRun(Config.class);
-			TemplateResolver resolver = this.context.getBean(TemplateResolver.class);
-			resolver.initialize();
+			SpringResourceTemplateResolver resolver = this.context
+					.getBean(SpringResourceTemplateResolver.class);
 			assertThat(resolver.isCacheable()).isTrue();
 		}
 		finally {
@@ -234,6 +240,18 @@ public class LocalDevToolsAutoConfigurationTests {
 				.containsKey(new File("src/test/java").getAbsoluteFile());
 	}
 
+	@Test
+	public void devToolsSwitchesJspServletToDevelopmentMode() {
+		this.context = initializeAndRun(Config.class);
+		TomcatEmbeddedServletContainer tomcatContainer = (TomcatEmbeddedServletContainer) ((EmbeddedWebApplicationContext) this.context)
+				.getEmbeddedWebServer();
+		Container context = tomcatContainer.getTomcat().getHost().findChildren()[0];
+		StandardWrapper jspServletWrapper = (StandardWrapper) context.findChild("jsp");
+		EmbeddedServletOptions options = (EmbeddedServletOptions) ReflectionTestUtils
+				.getField(jspServletWrapper.getServlet(), "options");
+		assertThat(options.getDevelopment()).isEqualTo(true);
+	}
+
 	private ConfigurableApplicationContext initializeAndRun(Class<?> config,
 			String... args) {
 		return initializeAndRun(config, Collections.<String, Object>emptyMap(), args);
@@ -244,7 +262,6 @@ public class LocalDevToolsAutoConfigurationTests {
 		Restarter.initialize(new String[0], false, new MockRestartInitializer(), false);
 		SpringApplication application = new SpringApplication(config);
 		application.setDefaultProperties(getDefaultProperties(properties));
-		application.setWebEnvironment(false);
 		ConfigurableApplicationContext context = application.run(args);
 		return context;
 	}
@@ -254,18 +271,21 @@ public class LocalDevToolsAutoConfigurationTests {
 		Map<String, Object> properties = new HashMap<String, Object>();
 		properties.put("spring.thymeleaf.check-template-location", false);
 		properties.put("spring.devtools.livereload.port", this.liveReloadPort);
+		properties.put("server.port", 0);
 		properties.putAll(specifiedProperties);
 		return properties;
 	}
 
 	@Configuration
-	@Import({ LocalDevToolsAutoConfiguration.class, ThymeleafAutoConfiguration.class })
+	@Import({ EmbeddedServletContainerAutoConfiguration.class,
+			LocalDevToolsAutoConfiguration.class, ThymeleafAutoConfiguration.class })
 	public static class Config {
 
 	}
 
 	@Configuration
-	@Import({ LocalDevToolsAutoConfiguration.class, ThymeleafAutoConfiguration.class })
+	@Import({ EmbeddedServletContainerAutoConfiguration.class,
+			LocalDevToolsAutoConfiguration.class, ThymeleafAutoConfiguration.class })
 	public static class ConfigWithMockLiveReload {
 
 		@Bean
@@ -276,7 +296,8 @@ public class LocalDevToolsAutoConfigurationTests {
 	}
 
 	@Configuration
-	@Import({ LocalDevToolsAutoConfiguration.class, ResourceProperties.class })
+	@Import({ EmbeddedServletContainerAutoConfiguration.class,
+			LocalDevToolsAutoConfiguration.class, ResourceProperties.class })
 	public static class WebResourcesConfig {
 
 	}

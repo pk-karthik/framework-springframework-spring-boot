@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,14 +28,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import org.springframework.beans.BeanUtils;
-import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.PropertyValues;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.MessageSource;
 import org.springframework.context.MessageSourceAware;
 import org.springframework.core.convert.ConversionService;
-import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.core.env.PropertySources;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -60,15 +58,12 @@ public class PropertiesConfigurationFactory<T>
 
 	private static final char[] TARGET_NAME_DELIMITERS = { '_', '.' };
 
-	private final Log logger = LogFactory.getLog(getClass());
+	private static final Log logger = LogFactory
+			.getLog(PropertiesConfigurationFactory.class);
 
 	private boolean ignoreUnknownFields = true;
 
 	private boolean ignoreInvalidFields;
-
-	private boolean exceptionIfInvalid = true;
-
-	private Properties properties;
 
 	private PropertySources propertySources;
 
@@ -86,13 +81,15 @@ public class PropertiesConfigurationFactory<T>
 
 	private ConversionService conversionService;
 
+	private boolean resolvePlaceholders = true;
+
 	/**
 	 * Create a new {@link PropertiesConfigurationFactory} instance.
 	 * @param target the target object to bind too
 	 * @see #PropertiesConfigurationFactory(Class)
 	 */
 	public PropertiesConfigurationFactory(T target) {
-		Assert.notNull(target);
+		Assert.notNull(target, "Target object must not be null");
 		this.target = target;
 	}
 
@@ -103,8 +100,8 @@ public class PropertiesConfigurationFactory<T>
 	 */
 	@SuppressWarnings("unchecked")
 	public PropertiesConfigurationFactory(Class<?> type) {
-		Assert.notNull(type);
-		this.target = (T) BeanUtils.instantiate(type);
+		Assert.notNull(type, "Target type must not be null");
+		this.target = (T) BeanUtils.instantiateClass(type);
 	}
 
 	/**
@@ -160,17 +157,6 @@ public class PropertiesConfigurationFactory<T>
 	}
 
 	/**
-	 * Set the properties.
-	 * @param properties the properties
-	 * @deprecated as of 1.4 in favor of {@link #setPropertySources(PropertySources)
-	 * setPropertySources} that contains a {@link PropertiesPropertySource}.
-	 */
-	@Deprecated
-	public void setProperties(Properties properties) {
-		this.properties = properties;
-	}
-
-	/**
 	 * Set the property sources.
 	 * @param propertySources the property sources
 	 */
@@ -195,12 +181,12 @@ public class PropertiesConfigurationFactory<T>
 	}
 
 	/**
-	 * Set a flag to indicate that an exception should be raised if a Validator is
-	 * available and validation fails.
-	 * @param exceptionIfInvalid the flag to set
+	 * Flag to indicate that placeholders should be replaced during binding. Default is
+	 * true.
+	 * @param resolvePlaceholders flag value
 	 */
-	public void setExceptionIfInvalid(boolean exceptionIfInvalid) {
-		this.exceptionIfInvalid = exceptionIfInvalid;
+	public void setResolvePlaceholders(boolean resolvePlaceholders) {
+		this.resolvePlaceholders = resolvePlaceholders;
 	}
 
 	@Override
@@ -230,34 +216,21 @@ public class PropertiesConfigurationFactory<T>
 	}
 
 	public void bindPropertiesToTarget() throws BindException {
-		Assert.state(this.properties != null || this.propertySources != null,
-				"Properties or propertySources should not be null");
-		try {
-			if (this.logger.isTraceEnabled()) {
-				if (this.properties != null) {
-					this.logger.trace(String.format("Properties:%n%s", this.properties));
-				}
-				else {
-					this.logger.trace("Property Sources: " + this.propertySources);
-				}
-			}
-			this.hasBeenBound = true;
-			doBindPropertiesToTarget();
+		Assert.state(this.propertySources != null, "PropertySources should not be null");
+		if (logger.isTraceEnabled()) {
+			logger.trace("Property Sources: " + this.propertySources);
+
 		}
-		catch (BindException ex) {
-			if (this.exceptionIfInvalid) {
-				throw ex;
-			}
-			this.logger.error("Failed to load Properties validation bean. "
-					+ "Your Properties may be invalid.", ex);
-		}
+		this.hasBeenBound = true;
+		doBindPropertiesToTarget();
 	}
 
 	private void doBindPropertiesToTarget() throws BindException {
 		RelaxedDataBinder dataBinder = (this.targetName != null
 				? new RelaxedDataBinder(this.target, this.targetName)
 				: new RelaxedDataBinder(this.target));
-		if (this.validator != null) {
+		if (this.validator != null
+				&& this.validator.supports(dataBinder.getTarget().getClass())) {
 			dataBinder.setValidator(this.validator);
 		}
 		if (this.conversionService != null) {
@@ -270,11 +243,13 @@ public class PropertiesConfigurationFactory<T>
 		customizeBinder(dataBinder);
 		Iterable<String> relaxedTargetNames = getRelaxedTargetNames();
 		Set<String> names = getNames(relaxedTargetNames);
-		PropertyValues propertyValues = getPropertyValues(names, relaxedTargetNames);
+		PropertyValues propertyValues = getPropertySourcesPropertyValues(names,
+				relaxedTargetNames);
 		dataBinder.bind(propertyValues);
 		if (this.validator != null) {
-			validate(dataBinder);
+			dataBinder.validate();
 		}
+		checkForBindingErrors(dataBinder);
 	}
 
 	private Iterable<String> getRelaxedTargetNames() {
@@ -310,19 +285,12 @@ public class PropertiesConfigurationFactory<T>
 		return names;
 	}
 
-	private PropertyValues getPropertyValues(Set<String> names,
-			Iterable<String> relaxedTargetNames) {
-		if (this.properties != null) {
-			return new MutablePropertyValues(this.properties);
-		}
-		return getPropertySourcesPropertyValues(names, relaxedTargetNames);
-	}
-
 	private PropertyValues getPropertySourcesPropertyValues(Set<String> names,
 			Iterable<String> relaxedTargetNames) {
 		PropertyNamePatternsMatcher includes = getPropertyNamePatternsMatcher(names,
 				relaxedTargetNames);
-		return new PropertySourcesPropertyValues(this.propertySources, names, includes);
+		return new PropertySourcesPropertyValues(this.propertySources, names, includes,
+				this.resolvePlaceholders);
 	}
 
 	private PropertyNamePatternsMatcher getPropertyNamePatternsMatcher(Set<String> names,
@@ -351,21 +319,19 @@ public class PropertiesConfigurationFactory<T>
 		return this.target != null && Map.class.isAssignableFrom(this.target.getClass());
 	}
 
-	private void validate(RelaxedDataBinder dataBinder) throws BindException {
-		dataBinder.validate();
+	private void checkForBindingErrors(RelaxedDataBinder dataBinder)
+			throws BindException {
 		BindingResult errors = dataBinder.getBindingResult();
 		if (errors.hasErrors()) {
-			this.logger.error("Properties configuration failed validation");
+			logger.error("Properties configuration failed validation");
 			for (ObjectError error : errors.getAllErrors()) {
-				this.logger
-						.error(this.messageSource != null
+				logger.error(
+						this.messageSource != null
 								? this.messageSource.getMessage(error,
 										Locale.getDefault()) + " (" + error + ")"
 								: error);
 			}
-			if (this.exceptionIfInvalid) {
-				throw new BindException(errors);
-			}
+			throw new BindException(errors);
 		}
 	}
 

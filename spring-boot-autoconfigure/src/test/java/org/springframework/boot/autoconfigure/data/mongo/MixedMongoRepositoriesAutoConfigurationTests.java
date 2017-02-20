@@ -81,36 +81,11 @@ public class MixedMongoRepositoriesAutoConfigurationTests {
 	}
 
 	@Test
-	public void testMixedRepositoryConfigurationWithDeprecatedEntityScan()
-			throws Exception {
-		this.context = new AnnotationConfigApplicationContext();
-		EnvironmentTestUtils.addEnvironment(this.context,
-				"spring.datasource.initialize:false");
-		this.context.register(MixedConfigurationWithDeprecatedEntityScan.class,
-				BaseConfiguration.class);
-		this.context.refresh();
-		assertThat(this.context.getBean(CountryRepository.class)).isNotNull();
-		assertThat(this.context.getBean(CityRepository.class)).isNotNull();
-	}
-
-	@Test
 	public void testJpaRepositoryConfigurationWithMongoTemplate() throws Exception {
 		this.context = new AnnotationConfigApplicationContext();
 		EnvironmentTestUtils.addEnvironment(this.context,
 				"spring.datasource.initialize:false");
 		this.context.register(JpaConfiguration.class, BaseConfiguration.class);
-		this.context.refresh();
-		assertThat(this.context.getBean(CityRepository.class)).isNotNull();
-	}
-
-	@Test
-	public void testJpaRepositoryConfigurationWithMongoTemplateAndDeprecatedEntityScan()
-			throws Exception {
-		this.context = new AnnotationConfigApplicationContext();
-		EnvironmentTestUtils.addEnvironment(this.context,
-				"spring.datasource.initialize:false");
-		this.context.register(JpaConfigurationWithDeprecatedEntityScan.class,
-				BaseConfiguration.class);
 		this.context.refresh();
 		assertThat(this.context.getBean(CityRepository.class)).isNotNull();
 	}
@@ -162,25 +137,6 @@ public class MixedMongoRepositoriesAutoConfigurationTests {
 
 	}
 
-	@Configuration
-	@TestAutoConfigurationPackage(MongoAutoConfigurationTests.class)
-	@EnableMongoRepositories(basePackageClasses = Country.class)
-	@org.springframework.boot.orm.jpa.EntityScan(basePackageClasses = City.class)
-	@EnableJpaRepositories(basePackageClasses = CityRepository.class)
-	@SuppressWarnings("deprecation")
-	protected static class MixedConfigurationWithDeprecatedEntityScan {
-
-	}
-
-	@Configuration
-	@TestAutoConfigurationPackage(MongoAutoConfigurationTests.class)
-	@org.springframework.boot.orm.jpa.EntityScan(basePackageClasses = City.class)
-	@EnableJpaRepositories(basePackageClasses = CityRepository.class)
-	@SuppressWarnings("deprecation")
-	protected static class JpaConfigurationWithDeprecatedEntityScan {
-
-	}
-
 	// In this one the Jpa repositories and the auto-configuration packages overlap, so
 	// Mongo will try and configure the same repositories
 	@Configuration
@@ -210,6 +166,7 @@ public class MixedMongoRepositoriesAutoConfigurationTests {
 			}
 			return names.toArray(new String[0]);
 		}
+
 	}
 
 }

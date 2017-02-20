@@ -21,6 +21,7 @@ import java.util.Properties;
 import javax.jms.JMSException;
 import javax.jms.XAConnection;
 import javax.jms.XAConnectionFactory;
+import javax.jms.XAJMSContext;
 
 import bitronix.tm.resource.common.ResourceBean;
 import bitronix.tm.resource.common.XAStatefulHolder;
@@ -115,6 +116,7 @@ public class PoolingConnectionFactoryBean extends PoolingConnectionFactory
 	/**
 	 * A {@link XAConnectionFactory} implementation that delegates to the
 	 * {@link ThreadLocal} {@link PoolingConnectionFactoryBean}.
+	 *
 	 * @see PoolingConnectionFactoryBean#setConnectionFactory(XAConnectionFactory)
 	 */
 	public static class DirectXAConnectionFactory implements XAConnectionFactory {
@@ -138,6 +140,16 @@ public class PoolingConnectionFactoryBean extends PoolingConnectionFactory
 
 		public XAConnectionFactory getConnectionFactory() {
 			return this.connectionFactory;
+		}
+
+		@Override
+		public XAJMSContext createXAContext() {
+			return this.connectionFactory.createXAContext();
+		}
+
+		@Override
+		public XAJMSContext createXAContext(String username, String password) {
+			return this.connectionFactory.createXAContext(username, password);
 		}
 
 	}

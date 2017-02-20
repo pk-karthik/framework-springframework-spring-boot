@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,17 +43,13 @@ import javax.servlet.ServletException;
 
 import io.undertow.Undertow;
 import io.undertow.Undertow.Builder;
-import io.undertow.UndertowMessages;
 import io.undertow.server.HandlerWrapper;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.accesslog.AccessLogHandler;
 import io.undertow.server.handlers.accesslog.AccessLogReceiver;
 import io.undertow.server.handlers.accesslog.DefaultAccessLogReceiver;
 import io.undertow.server.handlers.resource.FileResourceManager;
-import io.undertow.server.handlers.resource.Resource;
-import io.undertow.server.handlers.resource.ResourceChangeListener;
 import io.undertow.server.handlers.resource.ResourceManager;
-import io.undertow.server.handlers.resource.URLResource;
 import io.undertow.server.session.SessionManager;
 import io.undertow.servlet.Servlets;
 import io.undertow.servlet.api.DeploymentInfo;
@@ -71,8 +67,8 @@ import org.xnio.Xnio;
 import org.xnio.XnioWorker;
 
 import org.springframework.boot.context.embedded.AbstractEmbeddedServletContainerFactory;
-import org.springframework.boot.context.embedded.EmbeddedServletContainer;
 import org.springframework.boot.context.embedded.EmbeddedServletContainerFactory;
+import org.springframework.boot.context.embedded.EmbeddedWebServer;
 import org.springframework.boot.context.embedded.MimeMappings.Mapping;
 import org.springframework.boot.context.embedded.Ssl;
 import org.springframework.boot.context.embedded.Ssl.ClientAuth;
@@ -110,8 +106,6 @@ public class UndertowEmbeddedServletContainerFactory
 
 	private Integer bufferSize;
 
-	private Integer buffersPerRegion;
-
 	private Integer ioThreads;
 
 	private Integer workerThreads;
@@ -128,6 +122,8 @@ public class UndertowEmbeddedServletContainerFactory
 
 	private boolean accessLogEnabled = false;
 
+	private boolean accessLogRotate = true;
+
 	private boolean useForwardHeaders;
 
 	/**
@@ -135,7 +131,7 @@ public class UndertowEmbeddedServletContainerFactory
 	 */
 	public UndertowEmbeddedServletContainerFactory() {
 		super();
-		getJspServlet().setRegistered(false);
+		getJsp().setRegistered(false);
 	}
 
 	/**
@@ -145,7 +141,7 @@ public class UndertowEmbeddedServletContainerFactory
 	 */
 	public UndertowEmbeddedServletContainerFactory(int port) {
 		super(port);
-		getJspServlet().setRegistered(false);
+		getJsp().setRegistered(false);
 	}
 
 	/**
@@ -156,7 +152,7 @@ public class UndertowEmbeddedServletContainerFactory
 	 */
 	public UndertowEmbeddedServletContainerFactory(String contextPath, int port) {
 		super(contextPath, port);
-		getJspServlet().setRegistered(false);
+		getJsp().setRegistered(false);
 	}
 
 	/**
@@ -223,7 +219,7 @@ public class UndertowEmbeddedServletContainerFactory
 	}
 
 	@Override
-	public EmbeddedServletContainer getEmbeddedServletContainer(
+	public EmbeddedWebServer getEmbeddedServletContainer(
 			ServletContextInitializer... initializers) {
 		DeploymentManager manager = createDeploymentManager(initializers);
 		int port = getPort();
@@ -235,9 +231,6 @@ public class UndertowEmbeddedServletContainerFactory
 		Builder builder = Undertow.builder();
 		if (this.bufferSize != null) {
 			builder.setBufferSize(this.bufferSize);
-		}
-		if (this.buffersPerRegion != null) {
-			builder.setBuffersPerRegion(this.buffersPerRegion);
 		}
 		if (this.ioThreads != null) {
 			builder.setIoThreads(this.ioThreads);
@@ -415,8 +408,8 @@ public class UndertowEmbeddedServletContainerFactory
 			String prefix = (this.accessLogPrefix != null ? this.accessLogPrefix
 					: "access_log.");
 			AccessLogReceiver accessLogReceiver = new DefaultAccessLogReceiver(
-					createWorker(), this.accessLogDirectory, prefix,
-					this.accessLogSuffix);
+					createWorker(), this.accessLogDirectory, prefix, this.accessLogSuffix,
+					this.accessLogRotate);
 			String formatString = (this.accessLogPattern != null) ? this.accessLogPattern
 					: "common";
 			return new AccessLogHandler(handler, accessLogReceiver, formatString,
@@ -544,8 +537,9 @@ public class UndertowEmbeddedServletContainerFactory
 		this.bufferSize = bufferSize;
 	}
 
+	@Deprecated
 	public void setBuffersPerRegion(Integer buffersPerRegion) {
-		this.buffersPerRegion = buffersPerRegion;
+
 	}
 
 	public void setIoThreads(Integer ioThreads) {
@@ -588,6 +582,10 @@ public class UndertowEmbeddedServletContainerFactory
 		return this.accessLogEnabled;
 	}
 
+	public void setAccessLogRotate(boolean accessLogRotate) {
+		this.accessLogRotate = accessLogRotate;
+	}
+
 	protected final boolean isUseForwardHeaders() {
 		return this.useForwardHeaders;
 	}
@@ -599,53 +597,6 @@ public class UndertowEmbeddedServletContainerFactory
 	 */
 	public void setUseForwardHeaders(boolean useForwardHeaders) {
 		this.useForwardHeaders = useForwardHeaders;
-	}
-
-	/**
-	 * Undertow {@link ResourceManager} for JAR resources.
-	 */
-	private static class JarResourceManager implements ResourceManager {
-
-		private final String jarPath;
-
-		JarResourceManager(File jarFile) {
-			this(jarFile.getAbsolutePath());
-		}
-
-		JarResourceManager(String jarPath) {
-			this.jarPath = jarPath;
-		}
-
-		@Override
-		public Resource getResource(String path) throws IOException {
-			URL url = new URL("jar:file:" + this.jarPath + "!" + path);
-			URLResource resource = new URLResource(url, url.openConnection(), path);
-			if (resource.getContentLength() < 0) {
-				return null;
-			}
-			return resource;
-		}
-
-		@Override
-		public boolean isResourceChangeListenerSupported() {
-			return false;
-		}
-
-		@Override
-		public void registerResourceChangeListener(ResourceChangeListener listener) {
-			throw UndertowMessages.MESSAGES.resourceChangeListenerNotSupported();
-
-		}
-
-		@Override
-		public void removeResourceChangeListener(ResourceChangeListener listener) {
-			throw UndertowMessages.MESSAGES.resourceChangeListenerNotSupported();
-		}
-
-		@Override
-		public void close() throws IOException {
-		}
-
 	}
 
 	/**

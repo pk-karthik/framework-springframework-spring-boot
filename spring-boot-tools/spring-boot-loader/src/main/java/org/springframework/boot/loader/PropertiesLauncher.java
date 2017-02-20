@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -132,7 +132,7 @@ public class PropertiesLauncher extends Launcher {
 	public PropertiesLauncher() {
 		try {
 			this.home = getHomeDirectory();
-			initializeProperties(this.home);
+			initializeProperties();
 			initializePaths();
 			this.parent = createArchive();
 		}
@@ -146,7 +146,7 @@ public class PropertiesLauncher extends Launcher {
 				.resolvePlaceholders(System.getProperty(HOME, "${user.dir}")));
 	}
 
-	private void initializeProperties(File home) throws Exception, IOException {
+	private void initializeProperties() throws Exception, IOException {
 		String config = "classpath:BOOT-INF/classes/"
 				+ SystemPropertyUtils.resolvePlaceholders(
 						SystemPropertyUtils.getProperty(CONFIG_NAME, "application"))
@@ -273,14 +273,10 @@ public class PropertiesLauncher extends Launcher {
 		}
 	}
 
-	private void initializePaths() throws IOException {
-		String path = SystemPropertyUtils.getProperty(PATH);
-		if (path == null) {
-			path = this.properties.getProperty(PATH);
-		}
+	private void initializePaths() throws Exception {
+		String path = getProperty(PATH);
 		if (path != null) {
-			this.paths = parsePathsProperty(
-					SystemPropertyUtils.resolvePlaceholders(path));
+			this.paths = parsePathsProperty(path);
 		}
 		log("Nested archive paths: " + this.paths);
 	}
@@ -363,7 +359,7 @@ public class PropertiesLauncher extends Launcher {
 
 	private String getProperty(String propertyKey, String manifestKey) throws Exception {
 		if (manifestKey == null) {
-			manifestKey = propertyKey.replace(".", "-");
+			manifestKey = propertyKey.replace('.', '-');
 			manifestKey = toCamelCase(manifestKey);
 		}
 		String property = SystemPropertyUtils.getProperty(propertyKey);
@@ -540,11 +536,8 @@ public class PropertiesLauncher extends Launcher {
 		return builder.toString();
 	}
 
-	private static Object capitalize(String str) {
-		StringBuilder sb = new StringBuilder(str.length());
-		sb.append(Character.toUpperCase(str.charAt(0)));
-		sb.append(str.substring(1));
-		return sb.toString();
+	private static String capitalize(String str) {
+		return Character.toUpperCase(str.charAt(0)) + str.substring(1);
 	}
 
 	private void log(String message) {
@@ -635,4 +628,5 @@ public class PropertiesLauncher extends Launcher {
 		}
 
 	}
+
 }

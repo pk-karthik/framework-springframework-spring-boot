@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import org.gradle.api.plugins.JavaPlugin;
 
 import org.springframework.boot.gradle.buildinfo.BuildInfo;
 import org.springframework.boot.loader.tools.Layout;
+import org.springframework.boot.loader.tools.LayoutFactory;
 import org.springframework.boot.loader.tools.Layouts;
 
 /**
@@ -34,7 +35,7 @@ import org.springframework.boot.loader.tools.Layouts;
  * two of them. E.g.
  *
  * <pre>
- *     apply plugin: "spring-boot"
+ *     apply plugin: 'org.springframework.boot'
  *     springBoot {
  *         mainClass = 'org.demo.Application'
  *         layout = 'ZIP'
@@ -91,6 +92,12 @@ public class SpringBootPluginExtension {
 	LayoutType layout;
 
 	/**
+	 * The layout factory that will be used when no explicit layout is specified.
+	 * Alternative layouts can be provided by 3rd parties.
+	 */
+	LayoutFactory layoutFactory;
+
+	/**
 	 * Libraries that must be unpacked from fat jars in order to run. Use Strings in the
 	 * form {@literal groupId:artifactId}.
 	 */
@@ -99,7 +106,7 @@ public class SpringBootPluginExtension {
 	/**
 	 * Whether Spring Boot Devtools should be excluded from the fat jar.
 	 */
-	boolean excludeDevtools = false;
+	boolean excludeDevtools = true;
 
 	/**
 	 * Location of an agent jar to attach to the VM when running the application with
@@ -196,6 +203,14 @@ public class SpringBootPluginExtension {
 		this.layout = layout;
 	}
 
+	public LayoutFactory getLayoutFactory() {
+		return this.layoutFactory;
+	}
+
+	public void setLayoutFactory(LayoutFactory layoutFactory) {
+		this.layoutFactory = layoutFactory;
+	}
+
 	public Set<String> getRequiresUnpack() {
 		return this.requiresUnpack;
 	}
@@ -288,8 +303,6 @@ public class SpringBootPluginExtension {
 		ZIP(new Layouts.Expanded()),
 
 		DIR(new Layouts.Expanded()),
-
-		MODULE(new Layouts.Module()),
 
 		NONE(new Layouts.None());
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import org.springframework.boot.bind.RelaxedPropertyResolver;
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
 import org.springframework.boot.context.event.ApplicationFailedEvent;
 import org.springframework.boot.context.event.ApplicationPreparedEvent;
-import org.springframework.boot.context.event.ApplicationStartedEvent;
+import org.springframework.boot.context.event.ApplicationStartingEvent;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
@@ -97,24 +97,28 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	/**
 	 * The name of the Spring property that contains the directory where log files are
 	 * written.
+	 * @deprecated as of 1.5 in favor of {@link LogFile#PATH_PROPERTY}
 	 */
+	@Deprecated
 	public static final String PATH_PROPERTY = LogFile.PATH_PROPERTY;
 
 	/**
 	 * The name of the Spring property that contains the name of the log file. Names can
 	 * be an exact location or relative to the current directory.
+	 * @deprecated as of 1.5 in favor of {@link LogFile#FILE_PROPERTY}
 	 */
+	@Deprecated
 	public static final String FILE_PROPERTY = LogFile.FILE_PROPERTY;
 
 	/**
 	 * The name of the System property that contains the process ID.
 	 */
-	public static final String PID_KEY = LoggingSystemProperties.PID_KEY;
+	public static final String PID_KEY = "PID";
 
 	/**
 	 * The name of the System property that contains the exception conversion word.
 	 */
-	public static final String EXCEPTION_CONVERSION_WORD = LoggingSystemProperties.EXCEPTION_CONVERSION_WORD;
+	public static final String EXCEPTION_CONVERSION_WORD = "LOG_EXCEPTION_CONVERSION_WORD";
 
 	/**
 	 * The name of the System property that contains the log file.
@@ -129,17 +133,17 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	/**
 	 * The name of the System property that contains the console log pattern.
 	 */
-	public static final String CONSOLE_LOG_PATTERN = LoggingSystemProperties.CONSOLE_LOG_PATTERN;
+	public static final String CONSOLE_LOG_PATTERN = "CONSOLE_LOG_PATTERN";
 
 	/**
 	 * The name of the System property that contains the file log pattern.
 	 */
-	public static final String FILE_LOG_PATTERN = LoggingSystemProperties.FILE_LOG_PATTERN;
+	public static final String FILE_LOG_PATTERN = "FILE_LOG_PATTERN";
 
 	/**
 	 * The name of the System property that contains the log level pattern.
 	 */
-	public static final String LOG_LEVEL_PATTERN = LoggingSystemProperties.LOG_LEVEL_PATTERN;
+	public static final String LOG_LEVEL_PATTERN = "LOG_LEVEL_PATTERN";
 
 	/**
 	 * The name of the {@link LoggingSystem} bean.
@@ -161,9 +165,9 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 		LOG_LEVEL_LOGGERS.add(LogLevel.DEBUG, "org.hibernate.SQL");
 	}
 
-	private static Class<?>[] EVENT_TYPES = { ApplicationStartedEvent.class,
+	private static Class<?>[] EVENT_TYPES = { ApplicationStartingEvent.class,
 			ApplicationEnvironmentPreparedEvent.class, ApplicationPreparedEvent.class,
-			ContextClosedEvent.class };
+			ContextClosedEvent.class, ApplicationFailedEvent.class };
 
 	private static Class<?>[] SOURCE_TYPES = { SpringApplication.class,
 			ApplicationContext.class };
@@ -201,8 +205,8 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 
 	@Override
 	public void onApplicationEvent(ApplicationEvent event) {
-		if (event instanceof ApplicationStartedEvent) {
-			onApplicationStartedEvent((ApplicationStartedEvent) event);
+		if (event instanceof ApplicationStartingEvent) {
+			onApplicationStartingEvent((ApplicationStartingEvent) event);
 		}
 		else if (event instanceof ApplicationEnvironmentPreparedEvent) {
 			onApplicationEnvironmentPreparedEvent(
@@ -220,7 +224,7 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 		}
 	}
 
-	private void onApplicationStartedEvent(ApplicationStartedEvent event) {
+	private void onApplicationStartingEvent(ApplicationStartingEvent event) {
 		this.loggingSystem = LoggingSystem
 				.get(event.getSpringApplication().getClassLoader());
 		this.loggingSystem.beforeInitialize();
@@ -314,12 +318,7 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	}
 
 	private boolean ignoreLogConfig(String logConfig) {
-		return !StringUtils.hasLength(logConfig)
-				|| isDefaultAzureLoggingConfig(logConfig);
-	}
-
-	private boolean isDefaultAzureLoggingConfig(String candidate) {
-		return candidate.startsWith("-Djava.util.logging.config.file=");
+		return !StringUtils.hasLength(logConfig) || logConfig.startsWith("-D");
 	}
 
 	private void initializeFinalLoggingLevels(ConfigurableEnvironment environment,
@@ -350,7 +349,7 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	private void setLogLevel(LoggingSystem system, Environment environment, String name,
 			String level) {
 		try {
-			if (name.equalsIgnoreCase("root")) {
+			if (name.equalsIgnoreCase(LoggingSystem.ROOT_LOGGER_NAME)) {
 				name = null;
 			}
 			level = environment.resolvePlaceholders(level);

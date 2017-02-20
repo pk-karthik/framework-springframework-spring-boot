@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.session.data.redis.RedisFlushMode;
+import org.springframework.session.hazelcast.HazelcastFlushMode;
 
 /**
  * Configuration properties for Spring Session.
@@ -29,7 +30,7 @@ import org.springframework.session.data.redis.RedisFlushMode;
  * @author Vedran Pavic
  * @since 1.4.0
  */
-@ConfigurationProperties("spring.session")
+@ConfigurationProperties(prefix = "spring.session")
 public class SessionProperties {
 
 	/**
@@ -92,12 +93,25 @@ public class SessionProperties {
 		 */
 		private String mapName = "spring:session:sessions";
 
+		/**
+		 * Sessions flush mode.
+		 */
+		private HazelcastFlushMode flushMode = HazelcastFlushMode.ON_SAVE;
+
 		public String getMapName() {
 			return this.mapName;
 		}
 
 		public void setMapName(String mapName) {
 			this.mapName = mapName;
+		}
+
+		public HazelcastFlushMode getFlushMode() {
+			return this.flushMode;
+		}
+
+		public void setFlushMode(HazelcastFlushMode flushMode) {
+			this.flushMode = flushMode;
 		}
 
 	}
@@ -194,7 +208,7 @@ public class SessionProperties {
 		private String namespace = "";
 
 		/**
-		 * Flush mode for the Redis sessions.
+		 * Sessions flush mode.
 		 */
 		private RedisFlushMode flushMode = RedisFlushMode.ON_SAVE;
 

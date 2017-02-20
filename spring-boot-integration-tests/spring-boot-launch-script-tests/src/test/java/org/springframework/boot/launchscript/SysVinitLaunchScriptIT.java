@@ -119,6 +119,14 @@ public class SysVinitLaunchScriptIT {
 	}
 
 	@Test
+	public void forceStopWhenStopped() throws Exception {
+		String output = doTest("force-stop-when-stopped.sh");
+		assertThat(output).contains("Status: 0");
+		assertThat(output)
+				.has(coloredString(AnsiColor.YELLOW, "Not running (pidfile not found)"));
+	}
+
+	@Test
 	public void startWhenStarted() throws Exception {
 		String output = doTest("start-when-started.sh");
 		assertThat(output).contains("Status: 0");
@@ -198,6 +206,23 @@ public class SysVinitLaunchScriptIT {
 		doLaunch("launch-with-use-of-start-stop-daemon-disabled.sh");
 	}
 
+	@Test
+	public void launchWithRelativePidFolder() throws Exception {
+		String output = doTest("launch-with-relative-pid-folder.sh");
+		assertThat(output).has(
+				coloredString(AnsiColor.GREEN, "Started [" + extractPid(output) + "]"));
+		assertThat(output).has(
+				coloredString(AnsiColor.GREEN, "Running [" + extractPid(output) + "]"));
+		assertThat(output).has(
+				coloredString(AnsiColor.GREEN, "Stopped [" + extractPid(output) + "]"));
+	}
+
+	@Test
+	public void launchWithRelativeLogFolder() throws Exception {
+		String output = doTest("launch-with-relative-log-folder.sh");
+		assertThat(output).contains("Log written");
+	}
+
 	private void doLaunch(String script) throws Exception {
 		assertThat(doTest(script)).contains("Launched");
 	}
@@ -233,7 +258,7 @@ public class SysVinitLaunchScriptIT {
 
 	private DockerClient createClient() {
 		DockerClientConfig config = DockerClientConfig.createDefaultConfigBuilder()
-				.build();
+				.withVersion("1.19").build();
 		DockerClient docker = DockerClientBuilder.getInstance(config)
 				.withDockerCmdExecFactory(this.commandExecFactory).build();
 		return docker;

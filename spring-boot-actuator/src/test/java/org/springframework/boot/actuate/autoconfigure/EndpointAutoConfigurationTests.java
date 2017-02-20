@@ -23,6 +23,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 
+import javax.sql.DataSource;
+
 import liquibase.integration.spring.SpringLiquibase;
 import org.flywaydb.core.Flyway;
 import org.junit.After;
@@ -36,6 +38,7 @@ import org.springframework.boot.actuate.endpoint.FlywayEndpoint;
 import org.springframework.boot.actuate.endpoint.HealthEndpoint;
 import org.springframework.boot.actuate.endpoint.InfoEndpoint;
 import org.springframework.boot.actuate.endpoint.LiquibaseEndpoint;
+import org.springframework.boot.actuate.endpoint.LoggersEndpoint;
 import org.springframework.boot.actuate.endpoint.MetricsEndpoint;
 import org.springframework.boot.actuate.endpoint.PublicMetrics;
 import org.springframework.boot.actuate.endpoint.RequestMappingEndpoint;
@@ -49,9 +52,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionEvaluationRepor
 import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
 import org.springframework.boot.autoconfigure.info.ProjectInfoAutoConfiguration;
 import org.springframework.boot.autoconfigure.info.ProjectInfoProperties;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceBuilder;
 import org.springframework.boot.autoconfigure.jdbc.EmbeddedDataSourceConfiguration;
 import org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration;
 import org.springframework.boot.bind.PropertySourcesBinder;
+import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.boot.test.util.EnvironmentTestUtils;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -63,7 +68,6 @@ import org.springframework.core.io.support.PropertiesLoaderUtils;
 import org.springframework.validation.BindException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
 
 /**
  * Tests for {@link EndpointAutoConfiguration}.
@@ -75,6 +79,7 @@ import static org.mockito.Mockito.mock;
  * @author Stephane Nicoll
  * @author Eddú Meléndez
  * @author Meang Akira Tanaka
+ * @author Ben Hale
  */
 public class EndpointAutoConfigurationTests {
 
@@ -89,12 +94,13 @@ public class EndpointAutoConfigurationTests {
 
 	@Test
 	public void endpoints() throws Exception {
-		load(EndpointAutoConfiguration.class);
+		load(CustomLoggingConfig.class, EndpointAutoConfiguration.class);
 		assertThat(this.context.getBean(BeansEndpoint.class)).isNotNull();
 		assertThat(this.context.getBean(DumpEndpoint.class)).isNotNull();
 		assertThat(this.context.getBean(EnvironmentEndpoint.class)).isNotNull();
 		assertThat(this.context.getBean(HealthEndpoint.class)).isNotNull();
 		assertThat(this.context.getBean(InfoEndpoint.class)).isNotNull();
+		assertThat(this.context.getBean(LoggersEndpoint.class)).isNotNull();
 		assertThat(this.context.getBean(MetricsEndpoint.class)).isNotNull();
 		assertThat(this.context.getBean(ShutdownEndpoint.class)).isNotNull();
 		assertThat(this.context.getBean(TraceEndpoint.class)).isNotNull();
@@ -119,6 +125,14 @@ public class EndpointAutoConfigurationTests {
 		assertThat(bean).isNotNull();
 		Health result = bean.invoke();
 		assertThat(result).isNotNull();
+	}
+
+	@Test
+	public void loggersEndpointHasLoggers() throws Exception {
+		load(CustomLoggingConfig.class, EndpointAutoConfiguration.class);
+		LoggersEndpoint endpoint = this.context.getBean(LoggersEndpoint.class);
+		Map<String, Object> result = endpoint.invoke();
+		assertThat((Map<?, ?>) result.get("loggers")).size().isGreaterThan(0);
 	}
 
 	@Test
@@ -210,12 +224,13 @@ public class EndpointAutoConfigurationTests {
 	}
 
 	@Test
-	public void flywayEndpointIsDisabledWhenThereAreMultipleFlywayBeans() {
+	public void testFlywayEndpointWithMultipleFlywayBeans() {
 		this.context = new AnnotationConfigApplicationContext();
 		this.context.register(MultipleFlywayBeansConfig.class,
-				EndpointAutoConfiguration.class);
+				FlywayAutoConfiguration.class, EndpointAutoConfiguration.class);
 		this.context.refresh();
-		assertThat(this.context.getBeansOfType(FlywayEndpoint.class)).hasSize(0);
+		assertThat(this.context.getBeansOfType(Flyway.class)).hasSize(2);
+		assertThat(this.context.getBeansOfType(FlywayEndpoint.class)).hasSize(1);
 	}
 
 	@Test
@@ -230,18 +245,29 @@ public class EndpointAutoConfigurationTests {
 	}
 
 	@Test
-	public void liquibaseEndpointIsDisabledWhenThereAreMultipleSpringLiquibaseBeans() {
+	public void testLiquibaseEndpointWithMultipleSpringLiquibaseBeans() {
 		this.context = new AnnotationConfigApplicationContext();
 		this.context.register(MultipleLiquibaseBeansConfig.class,
-				EndpointAutoConfiguration.class);
+				LiquibaseAutoConfiguration.class, EndpointAutoConfiguration.class);
 		this.context.refresh();
-		assertThat(this.context.getBeansOfType(LiquibaseEndpoint.class)).hasSize(0);
+		assertThat(this.context.getBeansOfType(SpringLiquibase.class)).hasSize(2);
+		assertThat(this.context.getBeansOfType(LiquibaseEndpoint.class)).hasSize(1);
 	}
 
 	private void load(Class<?>... config) {
 		this.context = new AnnotationConfigApplicationContext();
 		this.context.register(config);
 		this.context.refresh();
+	}
+
+	@Configuration
+	static class CustomLoggingConfig {
+
+		@Bean
+		LoggingSystem loggingSystem() {
+			return LoggingSystem.get(getClass().getClassLoader());
+		}
+
 	}
 
 	@Configuration
@@ -308,32 +334,58 @@ public class EndpointAutoConfigurationTests {
 
 	}
 
-	@Configuration
-	static class MultipleFlywayBeansConfig {
+	static class DataSourceConfig {
 
 		@Bean
-		Flyway flywayOne() {
-			return mock(Flyway.class);
+		public DataSource dataSourceOne() {
+			return DataSourceBuilder.create().url("jdbc:hsqldb:mem:changelogdbtest")
+					.username("sa").build();
 		}
 
 		@Bean
-		Flyway flywayTwo() {
-			return mock(Flyway.class);
+		public DataSource dataSourceTwo() {
+			return DataSourceBuilder.create().url("jdbc:hsqldb:mem:changelogdbtest2")
+					.username("sa").build();
 		}
 
 	}
 
 	@Configuration
-	static class MultipleLiquibaseBeansConfig {
+	static class MultipleFlywayBeansConfig extends DataSourceConfig {
 
 		@Bean
-		SpringLiquibase liquibaseOne() {
-			return mock(SpringLiquibase.class);
+		public Flyway flywayOne() {
+			Flyway flyway = new Flyway();
+			flyway.setDataSource(dataSourceOne());
+			return flyway;
 		}
 
 		@Bean
-		SpringLiquibase liquibaseTwo() {
-			return mock(SpringLiquibase.class);
+		public Flyway flywayTwo() {
+			Flyway flyway = new Flyway();
+			flyway.setDataSource(dataSourceTwo());
+			return flyway;
+		}
+
+	}
+
+	@Configuration
+	static class MultipleLiquibaseBeansConfig extends DataSourceConfig {
+
+		@Bean
+		public SpringLiquibase liquibaseOne() {
+			SpringLiquibase liquibase = new SpringLiquibase();
+			liquibase.setChangeLog("classpath:/db/changelog/db.changelog-master.yaml");
+			liquibase.setDataSource(dataSourceOne());
+			return liquibase;
+		}
+
+		@Bean
+		public SpringLiquibase liquibaseTwo() {
+			SpringLiquibase liquibase = new SpringLiquibase();
+			liquibase.setChangeLog("classpath:/db/changelog/db.changelog-master.yaml");
+			liquibase.setDataSource(dataSourceTwo());
+			return liquibase;
 		}
 
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ import io.undertow.Undertow.Builder;
 import io.undertow.servlet.api.DeploymentInfo;
 import io.undertow.servlet.api.DeploymentManager;
 import io.undertow.servlet.api.ServletContainer;
+import org.apache.jasper.servlet.JspServlet;
 import org.junit.Test;
 import org.mockito.InOrder;
 
@@ -41,13 +42,14 @@ import org.springframework.boot.context.embedded.AbstractEmbeddedServletContaine
 import org.springframework.boot.context.embedded.AbstractEmbeddedServletContainerFactoryTests;
 import org.springframework.boot.context.embedded.ExampleServlet;
 import org.springframework.boot.context.embedded.MimeMappings.Mapping;
+import org.springframework.boot.context.embedded.PortInUseException;
 import org.springframework.boot.web.servlet.ErrorPage;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Matchers.anyObject;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 
@@ -71,7 +73,8 @@ public class UndertowEmbeddedServletContainerFactoryTests
 		AbstractEmbeddedServletContainerFactory factory = getFactory();
 		factory.addErrorPages(new ErrorPage(HttpStatus.NOT_FOUND, "/hello"));
 		this.container = factory.getEmbeddedServletContainer(
-				new ServletRegistrationBean(new ExampleServlet(), "/hello"));
+				new ServletRegistrationBean<ExampleServlet>(new ExampleServlet(),
+						"/hello"));
 		this.container.start();
 		assertThat(getResponse(getLocalUrl("/hello"))).isEqualTo("Hello World");
 		assertThat(getResponse(getLocalUrl("/not-found"))).isEqualTo("Hello World");
@@ -105,7 +108,7 @@ public class UndertowEmbeddedServletContainerFactoryTests
 		this.container = factory.getEmbeddedServletContainer();
 		InOrder ordered = inOrder((Object[]) customizers);
 		for (UndertowBuilderCustomizer customizer : customizers) {
-			ordered.verify(customizer).customize((Builder) anyObject());
+			ordered.verify(customizer).customize((Builder) any());
 		}
 	}
 
@@ -138,7 +141,7 @@ public class UndertowEmbeddedServletContainerFactoryTests
 		this.container = factory.getEmbeddedServletContainer();
 		InOrder ordered = inOrder((Object[]) customizers);
 		for (UndertowDeploymentInfoCustomizer customizer : customizers) {
-			ordered.verify(customizer).customize((DeploymentInfo) anyObject());
+			ordered.verify(customizer).customize((DeploymentInfo) any());
 		}
 	}
 
@@ -197,7 +200,8 @@ public class UndertowEmbeddedServletContainerFactoryTests
 		factory.setAccessLogDirectory(accessLogDirectory);
 		assertThat(accessLogDirectory.listFiles()).isEmpty();
 		this.container = factory.getEmbeddedServletContainer(
-				new ServletRegistrationBean(new ExampleServlet(), "/hello"));
+				new ServletRegistrationBean<ExampleServlet>(new ExampleServlet(),
+						"/hello"));
 		this.container.start();
 		assertThat(getResponse(getLocalUrl("/hello"))).isEqualTo("Hello World");
 		File accessLog = new File(accessLogDirectory, expectedFile);
@@ -249,7 +253,7 @@ public class UndertowEmbeddedServletContainerFactoryTests
 	}
 
 	@Override
-	protected Object getJspServlet() {
+	protected JspServlet getJspServlet() {
 		return null; // Undertow does not support JSPs
 	}
 
@@ -289,6 +293,13 @@ public class UndertowEmbeddedServletContainerFactoryTests
 				.getField(this.container, "manager")).getDeployment().getDeploymentInfo();
 		String charsetName = info.getLocaleCharsetMapping().get(locale.toString());
 		return (charsetName != null) ? Charset.forName(charsetName) : null;
+	}
+
+	@Override
+	protected void handleExceptionCausedByBlockedPort(RuntimeException ex,
+			int blockedPort) {
+		assertThat(ex).isInstanceOf(PortInUseException.class);
+		assertThat(((PortInUseException) ex).getPort()).isEqualTo(blockedPort);
 	}
 
 }

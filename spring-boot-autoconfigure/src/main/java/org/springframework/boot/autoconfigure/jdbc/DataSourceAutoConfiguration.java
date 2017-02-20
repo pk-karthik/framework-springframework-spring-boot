@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceInitializerPostProcessor.Registrar;
 import org.springframework.boot.autoconfigure.jdbc.metadata.DataSourcePoolMetadataProvidersConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
@@ -57,6 +58,7 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
  * @author Dave Syer
  * @author Phillip Webb
  * @author Stephane Nicoll
+ * @author Kazuki Shimizu
  */
 @Configuration
 @ConditionalOnClass({ DataSource.class, EmbeddedDatabaseType.class })
@@ -69,8 +71,9 @@ public class DataSourceAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public DataSourceInitializer dataSourceInitializer() {
-		return new DataSourceInitializer();
+	public DataSourceInitializer dataSourceInitializer(DataSourceProperties properties,
+			ApplicationContext applicationContext) {
+		return new DataSourceInitializer(properties, applicationContext);
 	}
 
 	/**
@@ -95,14 +98,14 @@ public class DataSourceAutoConfiguration {
 	@ConditionalOnMissingBean({ DataSource.class, XADataSource.class })
 	@Import(EmbeddedDataSourceConfiguration.class)
 	protected static class EmbeddedDatabaseConfiguration {
+
 	}
 
 	@Configuration
 	@Conditional(PooledDataSourceCondition.class)
 	@ConditionalOnMissingBean({ DataSource.class, XADataSource.class })
 	@Import({ DataSourceConfiguration.Tomcat.class, DataSourceConfiguration.Hikari.class,
-			DataSourceConfiguration.Dbcp.class, DataSourceConfiguration.Dbcp2.class,
-			DataSourceConfiguration.Generic.class })
+			DataSourceConfiguration.Dbcp2.class, DataSourceConfiguration.Generic.class })
 	protected static class PooledDataSourceConfiguration {
 
 	}
@@ -141,10 +144,12 @@ public class DataSourceAutoConfiguration {
 
 		@ConditionalOnProperty(prefix = "spring.datasource", name = "type")
 		static class ExplicitType {
+
 		}
 
 		@Conditional(PooledDataSourceAvailableCondition.class)
 		static class PooledDataSourceAvailable {
+
 		}
 
 	}
@@ -178,6 +183,7 @@ public class DataSourceAutoConfiguration {
 					.findType();
 			return (dataSourceClass == null ? null : dataSourceClass.getClassLoader());
 		}
+
 	}
 
 	/**
@@ -224,16 +230,16 @@ public class DataSourceAutoConfiguration {
 		public ConditionOutcome getMatchOutcome(ConditionContext context,
 				AnnotatedTypeMetadata metadata) {
 			ConditionMessage.Builder message = ConditionMessage
-					.forCondition("EmbeddedDataAvailable");
+					.forCondition("DataSourceAvailable");
 			if (hasBean(context, DataSource.class)
 					|| hasBean(context, XADataSource.class)) {
 				return ConditionOutcome
-						.match(message.foundExactly("existing database bean"));
+						.match(message.foundExactly("existing data source bean"));
 			}
 			if (anyMatches(context, metadata, this.pooledCondition,
 					this.embeddedCondition)) {
-				return ConditionOutcome
-						.match(message.foundExactly("existing auto-configured database"));
+				return ConditionOutcome.match(message
+						.foundExactly("existing auto-configured data source bean"));
 			}
 			return ConditionOutcome
 					.noMatch(message.didNotFind("any existing data source bean").atAll());

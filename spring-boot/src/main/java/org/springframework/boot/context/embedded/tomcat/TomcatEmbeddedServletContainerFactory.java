@@ -18,13 +18,12 @@ package org.springframework.boot.context.embedded.tomcat;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -33,7 +32,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletContainerInitializer;
-import javax.servlet.ServletContext;
 
 import org.apache.catalina.Context;
 import org.apache.catalina.Engine;
@@ -59,9 +57,9 @@ import org.apache.tomcat.util.net.SSLHostConfig;
 
 import org.springframework.boot.context.embedded.AbstractEmbeddedServletContainerFactory;
 import org.springframework.boot.context.embedded.Compression;
-import org.springframework.boot.context.embedded.EmbeddedServletContainer;
-import org.springframework.boot.context.embedded.EmbeddedServletContainerException;
 import org.springframework.boot.context.embedded.EmbeddedServletContainerFactory;
+import org.springframework.boot.context.embedded.EmbeddedWebServer;
+import org.springframework.boot.context.embedded.EmbeddedWebServerException;
 import org.springframework.boot.context.embedded.MimeMappings;
 import org.springframework.boot.context.embedded.Ssl;
 import org.springframework.boot.context.embedded.Ssl.ClientAuth;
@@ -73,7 +71,6 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.util.ResourceUtils;
-import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -125,7 +122,8 @@ public class TomcatEmbeddedServletContainerFactory
 
 	private String protocol = DEFAULT_PROTOCOL;
 
-	private String tldSkip;
+	private Set<String> tldSkipPatterns = new LinkedHashSet<String>(
+			TldSkipPatterns.DEFAULT);
 
 	private Charset uriEncoding = DEFAULT_CHARSET;
 
@@ -158,7 +156,7 @@ public class TomcatEmbeddedServletContainerFactory
 	}
 
 	@Override
-	public EmbeddedServletContainer getEmbeddedServletContainer(
+	public EmbeddedWebServer getEmbeddedServletContainer(
 			ServletContextInitializer... initializers) {
 		Tomcat tomcat = new Tomcat();
 		File baseDir = (this.baseDirectory != null ? this.baseDirectory
@@ -204,7 +202,7 @@ public class TomcatEmbeddedServletContainerFactory
 		catch (NoSuchMethodError ex) {
 			// Tomcat is < 8.0.30. Continue
 		}
-		SkipPatternJarScanner.apply(context, this.tldSkip);
+		SkipPatternJarScanner.apply(context, this.tldSkipPatterns);
 		WebappLoader loader = new WebappLoader(context.getParentClassLoader());
 		loader.setLoaderClass(TomcatEmbeddedWebappClassLoader.class.getName());
 		loader.setDelegate(true);
@@ -215,7 +213,6 @@ public class TomcatEmbeddedServletContainerFactory
 		if (shouldRegisterJspServlet()) {
 			addJspServlet(context);
 			addJasperInitializer(context);
-			context.addLifecycleListener(new StoreMergedWebXmlListener());
 		}
 		ServletContextInitializer[] initializersToUse = mergeInitializers(initializers);
 		configureContext(context, initializersToUse);
@@ -254,22 +251,27 @@ public class TomcatEmbeddedServletContainerFactory
 		// Otherwise the default location of a Spring DispatcherServlet cannot be set
 		defaultServlet.setOverridable(true);
 		context.addChild(defaultServlet);
-		context.addServletMapping("/", "default");
+		addServletMapping(context, "/", "default");
 	}
 
 	private void addJspServlet(Context context) {
 		Wrapper jspServlet = context.createWrapper();
 		jspServlet.setName("jsp");
-		jspServlet.setServletClass(getJspServlet().getClassName());
+		jspServlet.setServletClass(getJsp().getClassName());
 		jspServlet.addInitParameter("fork", "false");
-		for (Entry<String, String> initParameter : getJspServlet().getInitParameters()
+		for (Entry<String, String> initParameter : getJsp().getInitParameters()
 				.entrySet()) {
 			jspServlet.addInitParameter(initParameter.getKey(), initParameter.getValue());
 		}
 		jspServlet.setLoadOnStartup(3);
 		context.addChild(jspServlet);
-		context.addServletMapping("*.jsp", "jsp");
-		context.addServletMapping("*.jspx", "jsp");
+		addServletMapping(context, "*.jsp", "jsp");
+		addServletMapping(context, "*.jspx", "jsp");
+	}
+
+	@SuppressWarnings("deprecation")
+	private void addServletMapping(Context context, String pattern, String name) {
+		context.addServletMapping(pattern, name);
 	}
 
 	private void addJasperInitializer(TomcatEmbeddedContext context) {
@@ -412,7 +414,7 @@ public class TomcatEmbeddedServletContainerFactory
 			protocol.setKeystoreFile(ResourceUtils.getURL(ssl.getKeyStore()).toString());
 		}
 		catch (FileNotFoundException ex) {
-			throw new EmbeddedServletContainerException(
+			throw new EmbeddedWebServerException(
 					"Could not load key store: " + ex.getMessage(), ex);
 		}
 		if (ssl.getKeyStoreType() != null) {
@@ -431,7 +433,7 @@ public class TomcatEmbeddedServletContainerFactory
 						ResourceUtils.getURL(ssl.getTrustStore()).toString());
 			}
 			catch (FileNotFoundException ex) {
-				throw new EmbeddedServletContainerException(
+				throw new EmbeddedWebServerException(
 						"Could not load trust store: " + ex.getMessage(), ex);
 			}
 		}
@@ -547,10 +549,40 @@ public class TomcatEmbeddedServletContainerFactory
 	 * A comma-separated list of jars to ignore for TLD scanning. See Tomcat's
 	 * catalina.properties for typical values. Defaults to a list drawn from that source.
 	 * @param tldSkip the jars to skip when scanning for TLDs etc
+	 * @deprecated as of 1.5 in favor of {@link #setTldSkipPatterns(Collection)}
 	 */
+	@Deprecated
 	public void setTldSkip(String tldSkip) {
 		Assert.notNull(tldSkip, "TldSkip must not be null");
-		this.tldSkip = tldSkip;
+		setTldSkipPatterns(StringUtils.commaDelimitedListToSet(tldSkip));
+	}
+
+	/**
+	 * Returns a mutable set of the patterns that match jars to ignore for TLD scanning.
+	 * @return the list of jars to ignore for TLD scanning
+	 */
+	public Set<String> getTldSkipPatterns() {
+		return this.tldSkipPatterns;
+	}
+
+	/**
+	 * Set the patterns that match jars to ignore for TLD scanning. See Tomcat's
+	 * catalina.properties for typical values. Defaults to a list drawn from that source.
+	 * @param patterns the jar patterns to skip when scanning for TLDs etc
+	 */
+	public void setTldSkipPatterns(Collection<String> patterns) {
+		Assert.notNull(patterns, "Patterns must not be null");
+		this.tldSkipPatterns = new LinkedHashSet<String>(patterns);
+	}
+
+	/**
+	 * Add patterns that match jars to ignore for TLD scanning. See Tomcat's
+	 * catalina.properties for typical values.
+	 * @param patterns the additional jar patterns to skip when scanning for TLDs etc
+	 */
+	public void addTldSkipPatterns(String... patterns) {
+		Assert.notNull(patterns, "Patterns must not be null");
+		this.tldSkipPatterns.addAll(Arrays.asList(patterns));
 	}
 
 	/**
@@ -599,17 +631,6 @@ public class TomcatEmbeddedServletContainerFactory
 	public void setContextValves(Collection<? extends Valve> contextValves) {
 		Assert.notNull(contextValves, "Valves must not be null");
 		this.contextValves = new ArrayList<Valve>(contextValves);
-	}
-
-	/**
-	 * Returns a mutable collection of the {@link Valve}s that will be applied to the
-	 * Tomcat {@link Context}.
-	 * @return the contextValves the valves that will be applied
-	 * @deprecated as of 1.4 in favor of {@link #getContextValves()}
-	 */
-	@Deprecated
-	public Collection<Valve> getValves() {
-		return getContextValves();
 	}
 
 	/**
@@ -774,49 +795,6 @@ public class TomcatEmbeddedServletContainerFactory
 	 */
 	public void setBackgroundProcessorDelay(int delay) {
 		this.backgroundProcessorDelay = delay;
-	}
-
-	/**
-	 * {@link LifecycleListener} that stores an empty merged web.xml. This is critical for
-	 * Jasper on Tomcat 7 to prevent warnings about missing web.xml files and to enable
-	 * EL.
-	 */
-	private static class StoreMergedWebXmlListener implements LifecycleListener {
-
-		private static final String MERGED_WEB_XML = "org.apache.tomcat.util.scan.MergedWebXml";
-
-		@Override
-		public void lifecycleEvent(LifecycleEvent event) {
-			if (event.getType().equals(Lifecycle.CONFIGURE_START_EVENT)) {
-				onStart((Context) event.getLifecycle());
-			}
-		}
-
-		private void onStart(Context context) {
-			ServletContext servletContext = context.getServletContext();
-			if (servletContext.getAttribute(MERGED_WEB_XML) == null) {
-				servletContext.setAttribute(MERGED_WEB_XML, getEmptyWebXml());
-			}
-			TomcatResources.get(context).addClasspathResources();
-		}
-
-		private String getEmptyWebXml() {
-			InputStream stream = TomcatEmbeddedServletContainerFactory.class
-					.getResourceAsStream("empty-web.xml");
-			Assert.state(stream != null, "Unable to read empty web.xml");
-			try {
-				try {
-					return StreamUtils.copyToString(stream, Charset.forName("UTF-8"));
-				}
-				finally {
-					stream.close();
-				}
-			}
-			catch (IOException ex) {
-				throw new IllegalStateException(ex);
-			}
-		}
-
 	}
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015 the original author or authors.
+ * Copyright 2012-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ import org.codehaus.groovy.control.customizers.ImportCustomizer;
 import org.codehaus.groovy.transform.ASTTransformation;
 import org.codehaus.groovy.transform.ASTTransformationVisitor;
 
+import org.springframework.boot.cli.compiler.dependencies.SpringBootDependenciesDependencyManagement;
 import org.springframework.boot.cli.compiler.grape.AetherGrapeEngine;
 import org.springframework.boot.cli.compiler.grape.AetherGrapeEngineFactory;
 import org.springframework.boot.cli.compiler.grape.DependencyResolutionContext;
@@ -90,6 +91,8 @@ public class GroovyCompiler {
 		this.loader = createLoader(configuration);
 
 		DependencyResolutionContext resolutionContext = new DependencyResolutionContext();
+		resolutionContext.addDependencyManagement(
+				new SpringBootDependenciesDependencyManagement());
 
 		AetherGrapeEngine grapeEngine = AetherGrapeEngineFactory.create(this.loader,
 				configuration.getRepositoryConfiguration(), resolutionContext);

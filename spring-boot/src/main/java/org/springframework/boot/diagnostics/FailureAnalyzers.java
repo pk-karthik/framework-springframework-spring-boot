@@ -48,7 +48,7 @@ import org.springframework.util.ReflectionUtils;
  */
 public final class FailureAnalyzers {
 
-	private static final Log log = LogFactory.getLog(FailureAnalyzers.class);
+	private static final Log logger = LogFactory.getLog(FailureAnalyzers.class);
 
 	private final ClassLoader classLoader;
 
@@ -82,7 +82,7 @@ public final class FailureAnalyzers {
 				analyzers.add((FailureAnalyzer) constructor.newInstance());
 			}
 			catch (Throwable ex) {
-				log.trace("Failed to load " + analyzerName, ex);
+				logger.trace("Failed to load " + analyzerName, ex);
 			}
 		}
 		AnnotationAwareOrderComparator.sort(analyzers);
@@ -115,9 +115,14 @@ public final class FailureAnalyzers {
 
 	private FailureAnalysis analyze(Throwable failure, List<FailureAnalyzer> analyzers) {
 		for (FailureAnalyzer analyzer : analyzers) {
-			FailureAnalysis analysis = analyzer.analyze(failure);
-			if (analysis != null) {
-				return analysis;
+			try {
+				FailureAnalysis analysis = analyzer.analyze(failure);
+				if (analysis != null) {
+					return analysis;
+				}
+			}
+			catch (Throwable ex) {
+				logger.debug("FailureAnalyzer " + analyzer + " failed", ex);
 			}
 		}
 		return null;
@@ -133,20 +138,6 @@ public final class FailureAnalyzers {
 			reporter.report(analysis);
 		}
 		return true;
-	}
-
-	/**
-	 * Analyze and report the specified {@code failure}.
-	 * @param failure the failure to analyze
-	 * @param classLoader the classloader to use
-	 * @param context the context to use
-	 * @return {@code true} if the failure was handled
-	 * @deprecated as of 1.4.1 in favor of {@link #analyzeAndReport(Throwable)}
-	 */
-	@Deprecated
-	public static boolean analyzeAndReport(Throwable failure, ClassLoader classLoader,
-			ConfigurableApplicationContext context) {
-		return new FailureAnalyzers(context, classLoader).analyzeAndReport(failure);
 	}
 
 }

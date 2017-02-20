@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import javax.servlet.Servlet;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import org.springframework.aop.scope.ScopedProxyUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
@@ -97,12 +98,12 @@ public class ServletContextInitializerBeans
 	private void addServletContextInitializerBean(String beanName,
 			ServletContextInitializer initializer, ListableBeanFactory beanFactory) {
 		if (initializer instanceof ServletRegistrationBean) {
-			Servlet source = ((ServletRegistrationBean) initializer).getServlet();
+			Servlet source = ((ServletRegistrationBean<?>) initializer).getServlet();
 			addServletContextInitializerBean(Servlet.class, beanName, initializer,
 					beanFactory, source);
 		}
 		else if (initializer instanceof FilterRegistrationBean) {
-			Filter source = ((FilterRegistrationBean) initializer).getFilter();
+			Filter source = ((FilterRegistrationBean<?>) initializer).getFilter();
 			addServletContextInitializerBean(Filter.class, beanName, initializer,
 					beanFactory, source);
 		}
@@ -120,7 +121,7 @@ public class ServletContextInitializerBeans
 		}
 		else {
 			addServletContextInitializerBean(ServletContextInitializer.class, beanName,
-					initializer, beanFactory, null);
+					initializer, beanFactory, initializer);
 		}
 	}
 
@@ -229,7 +230,7 @@ public class ServletContextInitializerBeans
 		String[] names = beanFactory.getBeanNamesForType(type, true, false);
 		Map<String, T> map = new LinkedHashMap<String, T>();
 		for (String name : names) {
-			if (!excludes.contains(name)) {
+			if (!excludes.contains(name) && !ScopedProxyUtils.isScopedTarget(name)) {
 				T bean = beanFactory.getBean(name, type);
 				if (!excludes.contains(bean)) {
 					map.put(name, bean);
@@ -281,7 +282,8 @@ public class ServletContextInitializerBeans
 			if (name.equals(DISPATCHER_SERVLET_NAME)) {
 				url = "/"; // always map the main dispatcherServlet to "/"
 			}
-			ServletRegistrationBean bean = new ServletRegistrationBean(source, url);
+			ServletRegistrationBean<Servlet> bean = new ServletRegistrationBean<Servlet>(
+					source, url);
 			bean.setMultipartConfig(this.multipartConfig);
 			return bean;
 		}
@@ -297,7 +299,7 @@ public class ServletContextInitializerBeans
 		@Override
 		public RegistrationBean createRegistrationBean(String name, Filter source,
 				int totalNumberOfSourceBeans) {
-			return new FilterRegistrationBean(source);
+			return new FilterRegistrationBean<Filter>(source);
 		}
 
 	}

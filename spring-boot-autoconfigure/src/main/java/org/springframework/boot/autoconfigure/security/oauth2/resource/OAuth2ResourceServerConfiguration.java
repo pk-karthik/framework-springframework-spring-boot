@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 package org.springframework.boot.autoconfigure.security.oauth2.resource;
 
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionMessage;
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -76,6 +78,12 @@ public class OAuth2ResourceServerConfiguration {
 		return new ResourceSecurityConfigurer(this.resource);
 	}
 
+	@Bean
+	public static ResourceServerFilterChainOrderProcessor resourceServerFilterChainOrderProcessor(
+			ResourceServerProperties properties) {
+		return new ResourceServerFilterChainOrderProcessor(properties);
+	}
+
 	protected static class ResourceSecurityConfigurer
 			extends ResourceServerConfigurerAdapter {
 
@@ -94,6 +102,34 @@ public class OAuth2ResourceServerConfiguration {
 		@Override
 		public void configure(HttpSecurity http) throws Exception {
 			http.authorizeRequests().anyRequest().authenticated();
+		}
+
+	}
+
+	private static final class ResourceServerFilterChainOrderProcessor
+			implements BeanPostProcessor {
+
+		private final ResourceServerProperties properties;
+
+		private ResourceServerFilterChainOrderProcessor(
+				ResourceServerProperties properties) {
+			this.properties = properties;
+		}
+
+		@Override
+		public Object postProcessBeforeInitialization(Object bean, String beanName)
+				throws BeansException {
+			return bean;
+		}
+
+		@Override
+		public Object postProcessAfterInitialization(Object bean, String beanName)
+				throws BeansException {
+			if (bean instanceof ResourceServerConfiguration) {
+				ResourceServerConfiguration config = (ResourceServerConfiguration) bean;
+				config.setOrder(this.properties.getFilterOrder());
+			}
+			return bean;
 		}
 
 	}
@@ -127,13 +163,13 @@ public class OAuth2ResourceServerConfiguration {
 			}
 			if (StringUtils.hasText(resolver.getProperty("user-info-uri"))) {
 				return ConditionOutcome
-						.match(message.foundExactly("user-info-url property"));
+						.match(message.foundExactly("user-info-uri property"));
 			}
 			if (ClassUtils.isPresent(AUTHORIZATION_ANNOTATION, null)) {
 				if (AuthorizationServerEndpointsConfigurationBeanCondition
 						.matches(context)) {
-					return ConditionOutcome
-							.match(message.found("class").items(AUTHORIZATION_ANNOTATION));
+					return ConditionOutcome.match(
+							message.found("class").items(AUTHORIZATION_ANNOTATION));
 				}
 			}
 			return ConditionOutcome.noMatch(

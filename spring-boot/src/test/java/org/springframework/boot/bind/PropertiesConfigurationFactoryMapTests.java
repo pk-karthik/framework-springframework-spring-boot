@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 import org.junit.Test;
 
@@ -27,6 +28,7 @@ import org.springframework.context.support.StaticMessageSource;
 import org.springframework.core.env.CompositePropertySource;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.support.PropertiesLoaderUtils;
 import org.springframework.validation.Validator;
@@ -95,10 +97,12 @@ public class PropertiesConfigurationFactoryMapTests {
 		return bindFoo(values);
 	}
 
-	@Deprecated
 	private Foo bindFoo(final String values) throws Exception {
-		this.factory.setProperties(PropertiesLoaderUtils
-				.loadProperties(new ByteArrayResource(values.getBytes())));
+		Properties properties = PropertiesLoaderUtils
+				.loadProperties(new ByteArrayResource(values.getBytes()));
+		MutablePropertySources propertySources = new MutablePropertySources();
+		propertySources.addFirst(new PropertiesPropertySource("test", properties));
+		this.factory.setPropertySources(propertySources);
 		this.factory.afterPropertiesSet();
 		return this.factory.getObject();
 	}
@@ -113,6 +117,7 @@ public class PropertiesConfigurationFactoryMapTests {
 
 	// Foo needs to be public and to have setters for all properties
 	public static class Foo {
+
 		private Map<String, Object> map = new HashMap<String, Object>();
 
 		public Map<String, Object> getMap() {
@@ -122,6 +127,7 @@ public class PropertiesConfigurationFactoryMapTests {
 		public void setMap(Map<String, Object> map) {
 			this.map = map;
 		}
+
 	}
 
 }

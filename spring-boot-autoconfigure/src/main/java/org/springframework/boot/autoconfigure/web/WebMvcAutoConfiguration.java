@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.autoconfigure.web.ResourceProperties.Strategy;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.filter.OrderedHiddenHttpMethodFilter;
@@ -61,6 +62,7 @@ import org.springframework.format.datetime.DateFormatter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.DefaultMessageCodesResolver;
 import org.springframework.validation.MessageCodesResolver;
 import org.springframework.web.accept.ContentNegotiationManager;
@@ -112,7 +114,7 @@ import org.springframework.web.servlet.view.InternalResourceViewResolver;
  * @author Stephane Nicoll
  */
 @Configuration
-@ConditionalOnWebApplication
+@ConditionalOnWebApplication(type = Type.SERVLET)
 @ConditionalOnClass({ Servlet.class, DispatcherServlet.class,
 		WebMvcConfigurerAdapter.class })
 @ConditionalOnMissingBean(WebMvcConfigurationSupport.class)
@@ -516,13 +518,18 @@ public class WebMvcAutoConfiguration {
 
 		@Override
 		public Object getHandlerInternal(HttpServletRequest request) throws Exception {
-			for (MediaType mediaType : MediaType
-					.parseMediaTypes(request.getHeader(HttpHeaders.ACCEPT))) {
+			for (MediaType mediaType : getAcceptedMediaTypes(request)) {
 				if (mediaType.includes(MediaType.TEXT_HTML)) {
 					return super.getHandlerInternal(request);
 				}
 			}
 			return null;
+		}
+
+		private List<MediaType> getAcceptedMediaTypes(HttpServletRequest request) {
+			String acceptHeader = request.getHeader(HttpHeaders.ACCEPT);
+			return MediaType.parseMediaTypes(
+					StringUtils.hasText(acceptHeader) ? acceptHeader : "*/*");
 		}
 
 	}

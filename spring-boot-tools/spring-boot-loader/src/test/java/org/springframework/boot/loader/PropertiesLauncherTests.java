@@ -17,16 +17,21 @@
 package org.springframework.boot.loader;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.mockito.MockitoAnnotations;
 
 import org.springframework.boot.loader.archive.Archive;
@@ -44,6 +49,9 @@ public class PropertiesLauncherTests {
 
 	@Rule
 	public InternalOutputCapture output = new InternalOutputCapture();
+
+	@Rule
+	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	@Before
 	public void setup() throws IOException {
@@ -207,6 +215,23 @@ public class PropertiesLauncherTests {
 				.isEqualTo("[foo, bar]");
 	}
 
+	@SuppressWarnings("unchecked")
+	@Test
+	public void testLoadPathCustomizedUsingManifest() throws Exception {
+		System.setProperty("loader.home",
+				this.temporaryFolder.getRoot().getAbsolutePath());
+		Manifest manifest = new Manifest();
+		manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+		manifest.getMainAttributes().putValue("Loader-Path", "/foo.jar, /bar");
+		File manifestFile = new File(this.temporaryFolder.getRoot(),
+				"META-INF/MANIFEST.MF");
+		manifestFile.getParentFile().mkdirs();
+		manifest.write(new FileOutputStream(manifestFile));
+		PropertiesLauncher launcher = new PropertiesLauncher();
+		assertThat((List<String>) ReflectionTestUtils.getField(launcher, "paths"))
+				.containsExactly("/foo.jar", "/bar/");
+	}
+
 	private void waitFor(String value) throws Exception {
 		int count = 0;
 		boolean timeout = false;
@@ -228,6 +253,7 @@ public class PropertiesLauncherTests {
 		protected Class<?> findClass(String name) throws ClassNotFoundException {
 			return super.findClass(name);
 		}
+
 	}
 
 }

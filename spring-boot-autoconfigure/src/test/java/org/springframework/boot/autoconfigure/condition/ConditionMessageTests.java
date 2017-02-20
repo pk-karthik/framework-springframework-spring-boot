@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,13 +45,13 @@ public class ConditionMessageTests {
 	}
 
 	@Test
-	public void toStringWhenHasMessageShouldReturnMessage() throws Exception {
+	public void toStringWhenEmptyShouldReturnEmptyString() throws Exception {
 		ConditionMessage message = ConditionMessage.empty();
 		assertThat(message.toString()).isEqualTo("");
 	}
 
 	@Test
-	public void toStringWhenEmptyShouldReturnEmptyString() throws Exception {
+	public void toStringWhenHasMessageShouldReturnMessage() throws Exception {
 		ConditionMessage message = ConditionMessage.of("Test");
 		assertThat(message.toString()).isEqualTo("Test");
 	}
@@ -118,6 +118,12 @@ public class ConditionMessageTests {
 	}
 
 	@Test
+	public void forConditionShouldNotAddExtraSpaceWithEmptyCondition() throws Exception {
+		ConditionMessage message = ConditionMessage.forCondition("").because("OK");
+		assertThat(message.toString()).isEqualTo("OK");
+	}
+
+	@Test
 	public void forConditionWhenClassShouldIncludeCondition() throws Exception {
 		ConditionMessage message = ConditionMessage.forCondition(Test.class, "(a=b)")
 				.because("OK");
@@ -132,7 +138,7 @@ public class ConditionMessageTests {
 	}
 
 	@Test
-	public void foundWhenSingleElementShouldUsingSingular() throws Exception {
+	public void foundWhenSingleElementShouldUseSingular() throws Exception {
 		ConditionMessage message = ConditionMessage.forCondition(Test.class)
 				.found("bean", "beans").items("a");
 		assertThat(message.toString()).isEqualTo("@Test found bean a");
@@ -160,7 +166,7 @@ public class ConditionMessageTests {
 	}
 
 	@Test
-	public void didNotFindWhenSingleElementShouldUsingSingular() throws Exception {
+	public void didNotFindWhenSingleElementShouldUseSingular() throws Exception {
 		ConditionMessage message = ConditionMessage.forCondition(Test.class)
 				.didNotFind("class", "classes").items("a");
 		assertThat(message.toString()).isEqualTo("@Test did not find class a");

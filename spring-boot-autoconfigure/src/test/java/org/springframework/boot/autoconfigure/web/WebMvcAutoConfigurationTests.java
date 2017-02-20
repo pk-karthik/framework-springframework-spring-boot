@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ import org.junit.rules.ExpectedException;
 
 import org.springframework.beans.DirectFieldAccessor;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
-import org.springframework.boot.autoconfigure.PropertyPlaceholderAutoConfiguration;
+import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.WebMvcAutoConfiguration.WebMvcAutoConfigurationAdapter;
 import org.springframework.boot.autoconfigure.web.WebMvcAutoConfiguration.WelcomePageHandlerMapping;
 import org.springframework.boot.context.embedded.AnnotationConfigEmbeddedWebApplicationContext;
@@ -577,7 +577,7 @@ public class WebMvcAutoConfigurationTests {
 	}
 
 	@Test
-	public void welcomePageMappingOnlyHandlesRequestsThatAcceptTextHtml()
+	public void welcomePageMappingDoesNotHandleRequestsThatDoNotAcceptTextHtml()
 			throws Exception {
 		load("spring.resources.static-locations:classpath:/welcome-page/");
 		assertThat(this.context.getBeansOfType(WelcomePageHandlerMapping.class))
@@ -585,6 +585,27 @@ public class WebMvcAutoConfigurationTests {
 		MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(this.context).build();
 		mockMvc.perform(get("/").accept(MediaType.APPLICATION_JSON))
 				.andExpect(status().isNotFound());
+	}
+
+	@Test
+	public void welcomePageMappingHandlesRequestsWithNoAcceptHeader() throws Exception {
+		load("spring.resources.static-locations:classpath:/welcome-page/");
+		assertThat(this.context.getBeansOfType(WelcomePageHandlerMapping.class))
+				.hasSize(1);
+		MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(this.context).build();
+		mockMvc.perform(get("/")).andExpect(status().isOk())
+				.andExpect(forwardedUrl("index.html"));
+	}
+
+	@Test
+	public void welcomePageMappingHandlesRequestsWithEmptyAcceptHeader()
+			throws Exception {
+		load("spring.resources.static-locations:classpath:/welcome-page/");
+		assertThat(this.context.getBeansOfType(WelcomePageHandlerMapping.class))
+				.hasSize(1);
+		MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(this.context).build();
+		mockMvc.perform(get("/").header(HttpHeaders.ACCEPT, ""))
+				.andExpect(status().isOk()).andExpect(forwardedUrl("index.html"));
 	}
 
 	@Test
@@ -733,6 +754,7 @@ public class WebMvcAutoConfigurationTests {
 
 	private static class CustomWebBindingInitializer
 			extends ConfigurableWebBindingInitializer {
+
 	}
 
 	@Configuration
@@ -759,6 +781,7 @@ public class WebMvcAutoConfigurationTests {
 
 			};
 		}
+
 	}
 
 	private static class MyRequestMappingHandlerMapping
@@ -780,6 +803,7 @@ public class WebMvcAutoConfigurationTests {
 
 			};
 		}
+
 	}
 
 	private static class MyRequestMappingHandlerAdapter
